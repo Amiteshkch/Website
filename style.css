@@ -1,36 +1,42 @@
 body {
     margin: 0;
     font-family: Arial, sans-serif;
-    overflow-x: hidden;
     color: white;
     background: black;
 }
 
-#bg {
+canvas {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
     z-index: -1;
 }
 
-.content {
-    position: relative;
+header {
+    text-align: center;
     padding: 50px;
-    max-width: 900px;
 }
 
-header h1 {
-    font-size: 3rem;
-    margin-bottom: 0;
+nav {
+    text-align: center;
+    padding: 10px;
+}
+
+nav a {
+    margin: 0 15px;
+    color: cyan;
+    text-decoration: none;
 }
 
 section {
-    margin-top: 40px;
+    padding: 50px;
+    max-width: 900px;
+    margin: auto;
 }
 
-h2 {
-    border-bottom: 1px solid #555;
-    padding-bottom: 5px;
+.card {
+    background: rgba(255,255,255,0.1);
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 10px;
 }
