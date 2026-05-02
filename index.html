@@ -1,79 +1,98 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amitesh K. Chaudhary</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amitesh K. Chaudhary</title>
+<link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<canvas id="bg"></canvas>
-
-<header>
+<header class="hero">
     <h1>Amitesh K. Chaudhary</h1>
-    <p>PhD | Fluid Mechanics | Atomization | Heat & Mass Transfer</p>
+    <p>PhD | Multiphase Flows | Atomization | Heat & Mass Transfer</p>
 </header>
 
 <nav>
     <a href="#about">About</a>
     <a href="#research">Research</a>
+    <a href="#work">Experience</a>
     <a href="#skills">Skills</a>
     <a href="#publications">Publications</a>
     <a href="#contact">Contact</a>
 </nav>
 
 <section id="about">
-    <h2>About</h2>
+    <h2>About Me</h2>
     <p>
-        I am a PhD graduate from IISc Bangalore working at the intersection of 
-        fluid dynamics, heat & mass transfer, and experimental diagnostics.
-        My work focuses on spray atomization, droplet evaporation, and energy systems
-        relevant to gas turbines and spray drying.
+        I am a PhD graduate from IISc Bangalore working on experimental and numerical
+        investigation of atomization and droplet evaporation processes.
+        My work bridges fundamental fluid mechanics with real-world applications
+        in gas turbine combustion and spray drying systems.
     </p>
 </section>
 
 <section id="research">
-    <h2>Research & Projects</h2>
+    <h2>Research Highlights</h2>
 
-    <div class="card">
-        <h3>Rotary Atomization of Non-Newtonian Liquids</h3>
-        <p>Studied viscoelastic polymer sprays using high-speed imaging and rheology.</p>
+    <div class="project">
+        <img src="assets/atomization.jpg">
+        <div>
+            <h3>Rotary Atomization of Complex Fluids</h3>
+            <p>
+                Investigated breakup dynamics of viscoelastic liquids under high-speed
+                rotary atomization. Combined rheology, imaging, and droplet analysis.
+            </p>
+        </div>
     </div>
 
-    <div class="card">
-        <h3>Droplet Evaporation Modeling</h3>
-        <p>Developed 1D transient evaporation model with Stefan flow and heat transfer coupling.</p>
+    <div class="project">
+        <img src="assets/droplet.jpg">
+        <div>
+            <h3>Droplet Evaporation</h3>
+            <p>
+                Developed experimental setup and 1D transient model incorporating
+                heat and mass transfer coupling and Stefan flow effects.
+            </p>
+        </div>
     </div>
 
-    <div class="card">
-        <h3>Fuel Spray in Crossflow</h3>
-        <p>Experimental investigation of atomization and evaporation in gas turbine combustors.</p>
-    </div>
+</section>
 
+<section id="work">
+    <h2>Experience</h2>
+    <p><b>Research Associate, IISc Bangalore</b></p>
+    <p>Working on fuel spray atomization and evaporation in gas turbine combustors using laser diagnostics.</p>
 </section>
 
 <section id="skills">
     <h2>Skills</h2>
-    <ul>
-        <li>Python, MATLAB</li>
-        <li>CFD: Ansys Fluent, OpenFOAM, COMSOL</li>
-        <li>Experimental: PIV, Schlieren, Shadowgraphy</li>
-        <li>CAD: SolidWorks, CATIA</li>
-    </ul>
+    <div class="grid">
+        <div>Python, MATLAB</div>
+        <div>CFD (Fluent, OpenFOAM, COMSOL)</div>
+        <div>Laser Diagnostics, PIV</div>
+        <div>CAD (SolidWorks, CATIA)</div>
+    </div>
 </section>
 
 <section id="publications">
     <h2>Publications</h2>
-    <p>ILASS Asia 2022 | ICR 2023 | Papers under submission (ETFS, JNNFM, IJHMT)</p>
+    <ul>
+        <li>ILASS Asia 2022</li>
+        <li>ICR 2023 (Athens)</li>
+        <li>Manuscripts under submission</li>
+    </ul>
 </section>
 
 <section id="contact">
     <h2>Contact</h2>
     <p>Email: amiteshch93@gmail.com</p>
-    <p>LinkedIn: <a href="#">Your Link</a></p>
 </section>
 
-<script src="script.js"></script>
+<footer>
+    <p>© 2026 Amitesh K. Chaudhary</p>
+</footer>
+
 </body>
 </html>
