@@ -4,105 +4,99 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Amitesh K. Chaudhary</title>
+
 <link rel="stylesheet" href="style.css">
+
+<!-- Three.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+
 </head>
 
 <body>
 
-<canvas id="bg"></canvas>
+<div id="bg"></div>
 
 <header class="hero">
     <h1>Amitesh K. Chaudhary</h1>
-    <p>PhD | Multiphase Flows | Atomization | Heat & Mass Transfer</p>
-    <p class="subtitle">Bridging Experiments, Modeling, and Real-World Energy Systems</p>
+    <p class="tagline">
+        Multiphase Flows • Atomization • Heat & Mass Transfer
+    </p>
+    <div class="cta">
+        <a href="#research">Explore Research</a>
+        <a href="assets/CV.pdf" download>Download CV</a>
+    </div>
 </header>
 
 <nav>
     <a href="#about">About</a>
     <a href="#research">Research</a>
-    <a href="#deepdive">Deep Dive</a>
+    <a href="#deep">Deep Dive</a>
     <a href="#skills">Skills</a>
     <a href="#contact">Contact</a>
 </nav>
 
 <section id="about">
-    <h2>About</h2>
-    <p>
-        I am a PhD graduate from IISc Bangalore working on atomization,
-        droplet evaporation, and multiphase flow systems. My work combines
-        high-speed experimental diagnostics with physics-based modeling.
-    </p>
+<h2>About</h2>
+<p>
+PhD from IISc Bangalore specializing in experimental and computational
+investigation of atomization and droplet evaporation.
+My work bridges physics-based modeling with real-world engineering systems
+such as gas turbines and spray drying.
+</p>
 </section>
 
 <section id="research">
-    <h2>Research Highlights</h2>
+<h2>Research Highlights</h2>
 
-    <div class="project">
-        <img src="assets/atomization.jpg">
-        <div>
-            <h3>Rotary Atomization</h3>
-            <p>Breakup of viscoelastic fluids and droplet formation mechanisms.</p>
-            <button onclick="toggle(this)">More</button>
-            <div class="more">
-                Rheology + imaging + droplet statistics used to link fluid properties
-                with atomization efficiency.
-            </div>
-        </div>
-    </div>
+<div class="card">
+    <img src="assets/atomization.jpg">
+    <h3>Rotary Atomization</h3>
+    <p>Viscoelastic breakup and droplet formation physics</p>
+</div>
 
-    <div class="project">
-        <img src="assets/droplet.jpg">
-        <div>
-            <h3>Droplet Evaporation</h3>
-            <p>Coupled heat & mass transfer modeling.</p>
-            <button onclick="toggle(this)">More</button>
-            <div class="more">
-                Developed 1D transient evaporation model including Stefan flow and
-                environmental coupling.
-            </div>
-        </div>
-    </div>
+<div class="card">
+    <img src="assets/droplet.jpg">
+    <h3>Droplet Evaporation</h3>
+    <p>Coupled heat-mass transfer modeling</p>
+    <a href="pages/droplet.html">Deep Dive →</a>
+</div>
 
-    <div class="project">
-        <img src="assets/spray.jpg">
-        <div>
-            <h3>Fuel Spray in Crossflow</h3>
-            <p>Gas turbine spray dynamics using laser diagnostics.</p>
-        </div>
-    </div>
+<div class="card">
+    <img src="assets/spray.jpg">
+    <h3>Fuel Spray in Crossflow</h3>
+    <p>Laser diagnostics in combustor systems</p>
+</div>
 
 </section>
 
-<section id="deepdive">
-    <h2>Research Deep Dive</h2>
-    <p>
-        A combined experimental + numerical study of droplet evaporation:
-        including Stefan flow, transient heat conduction, and humidity effects.
-    </p>
-
-    <div class="card">
-        <p><b>Key Physics:</b> Heat transfer, diffusion, convection coupling</p>
-        <p><b>Tools:</b> Python, MATLAB, high-speed imaging</p>
-        <p><b>Outcome:</b> Predictive evaporation timescales for spray systems</p>
-    </div>
+<section id="deep">
+<h2>Research Philosophy</h2>
+<p>
+I combine high-fidelity experiments with reduced-order modeling
+to understand multiphase systems across scales—from droplet physics
+to industrial spray systems.
+</p>
 </section>
 
 <section id="skills">
-    <h2>Skills</h2>
-    <div class="grid">
-        <div>Python / ML</div>
-        <div>CFD Simulation</div>
-        <div>Laser Diagnostics</div>
-        <div>Image Processing</div>
-    </div>
+<h2>Technical Expertise</h2>
+<div class="grid">
+<div>CFD (Fluent, OpenFOAM, COMSOL)</div>
+<div>Python / Machine Learning</div>
+<div>Laser Diagnostics & Imaging</div>
+<div>Multiphase Modeling</div>
+</div>
 </section>
 
 <section id="contact">
-    <h2>Contact</h2>
-    <p>Email: amiteshch93@gmail.com</p>
+<h2>Contact</h2>
+<p>Email: amiteshch93@gmail.com</p>
+<p>
+<a href="https://www.linkedin.com/in/amitesh-kch">LinkedIn</a>
+</p>
 </section>
 
-<script src="script.js"></script>
+<script src="main.js"></script>
 
 </body>
 </html>
