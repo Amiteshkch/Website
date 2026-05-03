@@ -1,402 +1,690 @@
 /* ═══════════════════════════════════════════════════════════════
-   SPRAY DRYING ANIMATION — Three.js WebGL + GSAP ScrollTrigger
-   Jet → Ligament breakup → 3D Droplet cloud → Evaporation
+   PHYSICALLY REALISTIC SPRAY ANIMATION
+   Rayleigh-Plateau instability → ligament pinch-off → satellite
+   drops → oscillating droplets → evaporation
+   Three.js r160 + UnrealBloom EffectComposer
    ═══════════════════════════════════════════════════════════════ */
 
 (function () {
   'use strict';
 
+  /* ── wait for THREE + addons ─────────────────────────────────── */
+  if (!window.THREE) return;
+  const THREE = window.THREE;
+
   const canvas = document.getElementById('spray-canvas');
   if (!canvas) return;
 
-  // ── THREE.JS SCENE SETUP ──────────────────────────────────────
+  /* ── RENDERER ─────────────────────────────────────────────────── */
   const renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: true,
-    alpha: true,
+    canvas, antialias: true, alpha: true,
+    powerPreference: 'high-performance',
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor(0x000000, 0);
   renderer.setSize(canvas.offsetWidth, canvas.offsetHeight);
+  renderer.toneMapping    = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.4;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-  const scene = new THREE.Scene();
+  const scene  = new THREE.Scene();
+  scene.fog    = new THREE.FogExp2(0x020810, 0.028);
 
-  const camera = new THREE.PerspectiveCamera(
-    55,
-    canvas.offsetWidth / canvas.offsetHeight,
-    0.1,
-    200
-  );
-  camera.position.set(0, 0, 18);
+  const camera = new THREE.PerspectiveCamera(50, canvas.offsetWidth / canvas.offsetHeight, 0.1, 200);
+  camera.position.set(0, 2, 22);
 
-  // resize handler
   function onResize() {
-    const w = canvas.offsetWidth;
-    const h = canvas.offsetHeight;
+    const w = canvas.offsetWidth, h = canvas.offsetHeight;
     renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', onResize);
 
-  // ── SCROLL PROGRESS ──────────────────────────────────────────
-  let scrollProgress = 0;
+  /* ── SCROLL ──────────────────────────────────────────────────── */
+  let scrollP = 0;
   function updateScroll() {
     const hero = document.getElementById('hero');
     if (!hero) return;
-    scrollProgress = Math.min(1, Math.max(0, window.scrollY / hero.offsetHeight));
+    scrollP = Math.min(1, Math.max(0, window.scrollY / hero.offsetHeight));
   }
   window.addEventListener('scroll', updateScroll, { passive: true });
 
-  // ── COLOR HELPERS ────────────────────────────────────────────
-  const jetColor    = new THREE.Color(0x4fc3f7);
-  const dropColor   = new THREE.Color(0x81d4fa);
-  const mistColor   = new THREE.Color(0xb3e5fc);
-
-  // ── NOZZLE / TAP (2D canvas overlay drawn on top via 2D canvas) ─
-  // We'll keep the 2D tap drawing on a separate overlay canvas
-  const overlayCanvas = document.createElement('canvas');
-  overlayCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
-  canvas.parentElement.appendChild(overlayCanvas);
-  const oc = overlayCanvas.getContext('2d');
-
-  function resizeOverlay() {
-    const dpr = window.devicePixelRatio || 1;
-    overlayCanvas.width  = canvas.offsetWidth  * dpr;
-    overlayCanvas.height = canvas.offsetHeight * dpr;
-    oc.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  resizeOverlay();
-  window.addEventListener('resize', resizeOverlay);
-
-  function drawNozzle() {
-    const W = canvas.offsetWidth;
-    oc.clearRect(0, 0, W, canvas.offsetHeight);
-    const cx = W * 0.5;
-    const ty = 0;
-    const drip = 0.5 + 0.5 * Math.sin(Date.now() * 0.003);
-
-    oc.save();
-    oc.strokeStyle = 'rgba(79,195,247,0.6)';
-    oc.lineWidth = 2.5;
-    // horizontal pipe
-    oc.beginPath(); oc.moveTo(cx - 52, ty + 30); oc.lineTo(cx + 52, ty + 30); oc.stroke();
-    // vertical spout
-    oc.beginPath(); oc.moveTo(cx + 22, ty + 30); oc.lineTo(cx + 22, ty + 58); oc.stroke();
-    // flare
-    oc.strokeStyle = 'rgba(79,195,247,0.95)';
-    oc.lineWidth = 3;
-    oc.beginPath(); oc.moveTo(cx + 12, ty + 58); oc.lineTo(cx + 32, ty + 58); oc.stroke();
-    // drip
-    oc.beginPath();
-    oc.arc(cx + 22, ty + 58 + drip * 7, 3.5 + drip * 2.5, 0, Math.PI * 2);
-    const dAlpha = 0.5 + drip * 0.45;
-    oc.fillStyle = `rgba(79,195,247,${dAlpha})`;
-    oc.shadowBlur = 12; oc.shadowColor = '#4fc3f7';
-    oc.fill();
-    oc.shadowBlur = 0;
-    oc.restore();
+  /* ══════════════════════════════════════════════════════════════
+     SIMPLEX NOISE (2D, embedded)
+  ══════════════════════════════════════════════════════════════ */
+  function snoise2(x, y) {
+    const F2 = 0.5 * (Math.sqrt(3) - 1);
+    const G2 = (3 - Math.sqrt(3)) / 6;
+    const s  = (x + y) * F2;
+    const i  = Math.floor(x + s), j = Math.floor(y + s);
+    const t  = (i + j) * G2;
+    const X0 = i - t, Y0 = j - t;
+    const x0 = x - X0, y0 = y - Y0;
+    const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+    const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+    const x2 = x0 - 1 + 2*G2, y2 = y0 - 1 + 2*G2;
+    const grad = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+    function g(h, px, py) { const v = grad[h & 7]; return v[0]*px + v[1]*py; }
+    function p(n) {
+      const h = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
+      return h[n & 255];
+    }
+    let n0=0, n1=0, n2=0;
+    let t0 = 0.5 - x0*x0 - y0*y0; if(t0>=0){t0*=t0; n0=t0*t0*g(p(i+p(j)),x0,y0);}
+    let t1 = 0.5 - x1*x1 - y1*y1; if(t1>=0){t1*=t1; n1=t1*t1*g(p(i+i1+p(j+j1)),x1,y1);}
+    let t2 = 0.5 - x2*x2 - y2*y2; if(t2>=0){t2*=t2; n2=t2*t2*g(p(i+1+p(j+1)),x2,y2);}
+    return 70 * (n0 + n1 + n2);
   }
 
-  // ── JET PARTICLES ────────────────────────────────────────────
-  const JET_COUNT = 800;
-  const jetPositions = new Float32Array(JET_COUNT * 3);
-  const jetAlphas    = new Float32Array(JET_COUNT);
-  const jetSpeeds    = new Float32Array(JET_COUNT);
-  const jetPhases    = new Float32Array(JET_COUNT);
+  /* ══════════════════════════════════════════════════════════════
+     PHYSICS CONSTANTS (dimensionless, scaled to scene units)
+     Based on water/polymer solution properties
+  ══════════════════════════════════════════════════════════════ */
+  const PHYSICS = {
+    gravity:       0.0012,   // g downward per frame
+    drag:          0.9965,   // velocity damping
+    surfaceTension:0.0018,   // drives oscillation restoring force
+    viscosity:     0.994,    // oscillation damping (polymer > water)
+    jetRadius:     0.18,     // unperturbed jet radius (scene units)
+    perturbAmp:    0.06,     // initial Rayleigh perturbation amplitude
+    perturbWave:   2.8,      // wavenumber of fastest-growing mode (≈ 2π r₀)
+    pinchThresh:   0.022,    // radius threshold for pinch-off
+    satelliteProb: 0.55,     // probability of satellite drop at pinch-off
+  };
 
-  for (let i = 0; i < JET_COUNT; i++) {
-    jetPositions[i * 3 + 1] = (Math.random() - 0.5) * 12; // y spread along jet
-    jetSpeeds[i]  = 0.5 + Math.random() * 1.2;
-    jetPhases[i]  = Math.random() * Math.PI * 2;
-    jetAlphas[i]  = Math.random();
+  /* ══════════════════════════════════════════════════════════════
+     JET — Rayleigh-Plateau instability model
+     The jet is a chain of nodes; each node's radius evolves as
+       r(z,t) = r₀ + a·cos(kz) · cosh(ωt)   (linear stage)
+     When r < pinchThresh at any node → pinch-off event
+  ══════════════════════════════════════════════════════════════ */
+  const JET_NODES = 120;
+  const JET_LENGTH = 14;   // scene units
+
+  class JetNode {
+    constructor(index) {
+      this.index   = index;
+      this.frac    = index / (JET_NODES - 1); // 0=top, 1=bottom
+      this.y       = 4.5 - this.frac * JET_LENGTH;
+      this.r       = PHYSICS.jetRadius;
+      this.phase   = this.frac * PHYSICS.perturbWave * Math.PI * 2
+                     + (Math.random() - 0.5) * 0.3;
+      this.pertAmp = PHYSICS.perturbAmp * (0.7 + Math.random() * 0.6);
+      this.growthRate = 0.0;  // set when breakup starts
+      this.pinched = false;
+    }
   }
 
-  const jetGeo = new THREE.BufferGeometry();
-  jetGeo.setAttribute('position', new THREE.BufferAttribute(jetPositions, 3));
-  const jetMat = new THREE.PointsMaterial({
-    color: jetColor,
-    size: 0.12,
-    transparent: true,
-    opacity: 0.85,
-    sizeAttenuation: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
+  const jetNodes = Array.from({ length: JET_NODES }, (_, i) => new JetNode(i));
+
+  /* Build jet tube geometry — updated each frame */
+  const JET_SEGS   = JET_NODES - 1;
+  const jetTubeGeo = new THREE.BufferGeometry();
+  const jetTubePts = new Float32Array(JET_NODES * 3);
+  const jetTubeAlp = new Float32Array(JET_NODES);
+  const jetTubeSze = new Float32Array(JET_NODES); // "radius" encoded as point size
+
+  jetTubeGeo.setAttribute('position', new THREE.BufferAttribute(jetTubePts, 3));
+  jetTubeGeo.setAttribute('aAlpha',   new THREE.BufferAttribute(jetTubeAlp, 1));
+  jetTubeGeo.setAttribute('aSize',    new THREE.BufferAttribute(jetTubeSze, 1));
+
+  const JET_VERT = `
+    attribute float aAlpha;
+    attribute float aSize;
+    varying float vA;
+    varying float vS;
+    void main(){
+      vA = aAlpha; vS = aSize;
+      vec4 mv = modelViewMatrix * vec4(position,1.);
+      gl_Position  = projectionMatrix * mv;
+      gl_PointSize = aSize * 280. / (-mv.z);
+    }`;
+  const JET_FRAG = `
+    varying float vA; varying float vS;
+    void main(){
+      vec2 uv = gl_PointCoord - .5;
+      float d = length(uv);
+      if(d>.5) discard;
+      // liquid cross-section look: bright core, dark edge (internal reflection)
+      float core  = 1. - smoothstep(.0, .28, d);
+      float rim   = smoothstep(.32, .48, d) * (1. - smoothstep(.48,.5,d));
+      float body  = 1. - smoothstep(.0, .45, d);
+      vec3 col = mix(vec3(.88,.97,1.), vec3(.12,.56,.9), d*1.8);
+      col += vec3(.6,.9,1.) * core * .55;
+      col += vec3(.3,.7,.9) * rim  * .35;
+      gl_FragColor = vec4(col, vA * body);
+    }`;
+
+  const jetMat = new THREE.ShaderMaterial({
+    vertexShader: JET_VERT, fragmentShader: JET_FRAG,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    uniforms: {},
   });
-  const jetPoints = new THREE.Points(jetGeo, jetMat);
-  jetPoints.position.y = 2;
-  scene.add(jetPoints);
+  const jetPointCloud = new THREE.Points(jetTubeGeo, jetMat);
+  scene.add(jetPointCloud);
 
-  // ── DROPLET CLOUD (instanced spheres) ─────────────────────────
-  const DROP_COUNT = 400;
-  const dropGeo = new THREE.SphereGeometry(1, 8, 8);
-  const dropMat = new THREE.MeshPhongMaterial({
-    color: dropColor,
-    emissive: new THREE.Color(0x1a6080),
-    emissiveIntensity: 0.4,
-    transparent: true,
-    opacity: 0.82,
-    shininess: 120,
-    specular: new THREE.Color(0xffffff),
+  /* ── update jet geometry from node states ── */
+  function updateJetGeometry(appear) {
+    const pos = jetTubeGeo.attributes.position;
+    const alp = jetTubeGeo.attributes.aAlpha;
+    const sze = jetTubeGeo.attributes.aSize;
+    for (let i = 0; i < JET_NODES; i++) {
+      const n = jetNodes[i];
+      const wobX = n.pinched ? 0 : snoise2(n.frac * 4, n.phase * 0.1) * 0.08;
+      pos.setXYZ(i, wobX, n.y * appear, 0);
+      alp.setX(i, n.pinched ? 0 : appear * (0.6 + 0.4 * (1 - n.frac)));
+      sze.setX(i, n.pinched ? 0 : Math.max(0, n.r) * 85);
+    }
+    pos.needsUpdate = true; alp.needsUpdate = true; sze.needsUpdate = true;
+  }
+
+  /* ── Rayleigh-Plateau instability physics ── */
+  function evolveJet(breakup, t, dt) {
+    // Growth rate for fastest mode: ω = (σ/ρ r₀³)^0.5 · F(x)
+    // Simplified dimensionless: growthRate scales with breakup progress
+    const omega = breakup * 0.042;
+
+    for (let i = 0; i < JET_NODES; i++) {
+      const n = jetNodes[i];
+      if (n.pinched) continue;
+
+      // Position of max instability moves down jet over time
+      const taper   = Math.pow(n.frac, 0.6);
+      const phase   = n.phase + t * PHYSICS.perturbWave * 0.4;
+      const perturb = n.pertAmp * taper * Math.cos(phase) * Math.exp(omega * t * taper);
+
+      n.r = PHYSICS.jetRadius + perturb;
+
+      // Add noise for polymer viscoelastic effect (beads-on-a-string)
+      n.r += snoise2(n.frac * 8 + t * 0.3, n.index * 0.05) * 0.012 * taper;
+      n.r  = Math.max(0, n.r);
+    }
+  }
+
+  /* ── detect pinch-off events ── */
+  function detectPinchOff(breakup) {
+    if (breakup < 0.15) return [];
+    const events = [];
+    for (let i = 1; i < JET_NODES - 1; i++) {
+      const n = jetNodes[i];
+      if (!n.pinched && n.r < PHYSICS.pinchThresh) {
+        n.pinched = true;
+        events.push({ x: 0, y: n.y, frac: n.frac, index: i });
+      }
+    }
+    return events;
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     DROPLET — physically based oscillating sphere
+     After pinch-off a droplet forms with:
+       - radius from volume conservation: r_drop = (3/2 · r₀² · λ)^(1/3)
+       - initial velocity inherited from jet
+       - shape oscillation: prolate ↔ oblate (Weber number driven)
+       - evaporation following D²-law
+  ══════════════════════════════════════════════════════════════ */
+  class Droplet {
+    constructor(x, y, z, r, type, vx, vy, vz) {
+      this.x = x; this.y = y; this.z = z;
+      this.r = r; this.currentR = r;
+      this.type = type;                  // 'primary' | 'satellite' | 'micro'
+      this.vx = vx; this.vy = vy; this.vz = vz;
+      this.life = 0;
+      this.maxLife = type === 'micro'    ? 140 + Math.random() * 80
+                   : type === 'satellite'? 220 + Math.random() * 100
+                   : 320 + Math.random() * 140;
+      // Shape oscillation (prolate-oblate, Weber number model)
+      this.oscAmp     = type === 'primary' ? 0.22 + Math.random() * 0.18 : 0.1;
+      this.oscFreq    = Math.sqrt(PHYSICS.surfaceTension / (r * r * r)) * (0.8 + Math.random() * 0.4);
+      this.oscPhase   = Math.random() * Math.PI * 2;
+      this.oscDamp    = Math.pow(PHYSICS.viscosity, 0.5); // polymer damping
+      // D²-law evaporation
+      this.evapK      = type === 'micro'    ? 0.000045
+                      : type === 'satellite'? 0.000018
+                      : 0.000006;
+      this.D2_0       = (2 * r) ** 2;  // initial diameter squared
+      // internal ligament thread (beads-on-string artifact)
+      this.hasThread  = type === 'primary' && Math.random() < 0.4;
+      this.threadLen  = r * (3 + Math.random() * 4);
+      this.mesh       = null;  // set after creation
+    }
+
+    update(dt) {
+      this.life++;
+      // Equations of motion
+      this.x  += this.vx;
+      this.y  += this.vy;
+      this.z  += this.vz;
+      this.vy -= PHYSICS.gravity;
+      this.vx *= PHYSICS.drag;
+      this.vy *= PHYSICS.drag;
+      this.vz *= PHYSICS.drag;
+
+      // D²-law: D²(t) = D²₀ - K·t
+      const D2 = Math.max(0, this.D2_0 - this.evapK * this.life);
+      this.currentR = Math.sqrt(D2) / 2;
+
+      // Shape oscillation (damped harmonic)
+      const oscAngle = this.oscFreq * this.life + this.oscPhase;
+      const damp     = Math.pow(this.oscDamp, this.life * 0.02);
+      this.aspect    = 1 + this.oscAmp * damp * Math.sin(oscAngle);
+
+      return this.currentR > 0.003 && this.life < this.maxLife && this.y > -14;
+    }
+
+    get alpha() {
+      return Math.min(1, this.life / 18)
+           * Math.max(0, 1 - (this.life - this.maxLife + 50) / 50);
+    }
+  }
+
+  /* ── Droplet GPU buffer ─────────────────────────────────────── */
+  const MAX_DROPS = 800;
+  const dPos   = new Float32Array(MAX_DROPS * 3);
+  const dSzX   = new Float32Array(MAX_DROPS);  // scale X (oscillation)
+  const dSzY   = new Float32Array(MAX_DROPS);  // scale Y
+  const dAlpha = new Float32Array(MAX_DROPS);
+  const dType  = new Float32Array(MAX_DROPS);  // 0=primary,1=satellite,2=micro
+
+  for (let i = 0; i < MAX_DROPS; i++) dPos[i*3+1] = -30;
+
+  const dropGeo = new THREE.BufferGeometry();
+  dropGeo.setAttribute('position', new THREE.BufferAttribute(dPos, 3));
+  dropGeo.setAttribute('aSzX',     new THREE.BufferAttribute(dSzX, 1));
+  dropGeo.setAttribute('aSzY',     new THREE.BufferAttribute(dSzY, 1));
+  dropGeo.setAttribute('aAlpha',   new THREE.BufferAttribute(dAlpha, 1));
+  dropGeo.setAttribute('aType',    new THREE.BufferAttribute(dType, 1));
+
+  const DROP_VERT = `
+    attribute float aSzX;
+    attribute float aSzY;
+    attribute float aAlpha;
+    attribute float aType;
+    varying float vA;
+    varying float vT;
+    varying float vSx;
+    varying float vSy;
+    void main(){
+      vA = aAlpha; vT = aType; vSx = aSzX; vSy = aSzY;
+      vec4 mv = modelViewMatrix * vec4(position,1.);
+      gl_Position  = projectionMatrix * mv;
+      gl_PointSize = max(aSzX,aSzY) * 320. / (-mv.z);
+    }`;
+  const DROP_FRAG = `
+    varying float vA; varying float vT; varying float vSx; varying float vSy;
+    void main(){
+      // Elliptical clip for oscillation shape
+      vec2 uv = (gl_PointCoord - .5) * 2.;
+      float ratio = max(vSx,vSy) > 0. ? vSx/max(vSx,vSy) : 1.;
+      vec2 uvE = vec2(uv.x / max(ratio, .01), uv.y * max(ratio, .01));
+      float d = length(uvE * .5);
+      if(d > .5) discard;
+
+      vec3 col;
+      if(vT < 0.5){
+        // Primary drop — water sphere look
+        float spec = 1. - smoothstep(.0,.22, length(uv*.5 + vec2(.2,.22)));
+        float core = 1. - smoothstep(.0,.35,d);
+        float rim  = smoothstep(.38,.48,d)*(1.-smoothstep(.48,.5,d));
+        col  = mix(vec3(.75,.94,1.), vec3(.05,.35,.78), d*2.);
+        col += spec * vec3(1.,1.,1.) * .85;
+        col += rim  * vec3(.4,.8,1.) * .5;
+      } else if(vT < 1.5){
+        // Satellite — smaller, slightly amber tint (concentrated polymer)
+        float spec = 1. - smoothstep(.0,.18, length(uv*.5 + vec2(.17,.19)));
+        col = mix(vec3(.85,.96,.8), vec3(.2,.55,.3), d*2.);
+        col += spec * .7;
+      } else {
+        // Micro / mist
+        col = mix(vec3(.72,.9,1.), vec3(.3,.65,.9), d*2.);
+      }
+      float body = 1. - smoothstep(.35,.5,d);
+      float halo = 1. - smoothstep(.45,.5,d);
+      gl_FragColor = vec4(col, vA * (body*.88 + halo*.18));
+    }`;
+
+  const dropMat = new THREE.ShaderMaterial({
+    vertexShader: DROP_VERT, fragmentShader: DROP_FRAG,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    uniforms: {},
   });
+  const dropCloud = new THREE.Points(dropGeo, dropMat);
+  scene.add(dropCloud);
 
-  // store drop state
+  /* Droplet pool */
   const drops = [];
-  const dropMeshes = [];
-
-  function spawnDrop(progress) {
-    if (drops.length >= DROP_COUNT) return null;
-    const breakup = Math.max(0, (progress - 0.20) / 0.35);
-    if (breakup < 0.08) return null;
-
-    const rand = Math.random();
-    let r, type;
-    if (rand < 0.05)      { r = 0.28 + Math.random() * 0.18; type = 'large'; }
-    else if (rand < 0.22) { r = 0.14 + Math.random() * 0.12; type = 'medium'; }
-    else if (rand < 0.55) { r = 0.06 + Math.random() * 0.08; type = 'small'; }
-    else                  { r = 0.02 + Math.random() * 0.04; type = 'mist'; }
-
-    const spread = breakup * 5;
-    const x  =  (Math.random() - 0.5) * spread;
-    const y  =  2 - Math.random() * 7;
-    const z  =  (Math.random() - 0.5) * spread * 0.6;
-    const vx =  (Math.random() - 0.5) * 0.06 * (1 + breakup);
-    const vy = -(0.01 + Math.random() * 0.04);
-    const vz =  (Math.random() - 0.5) * 0.04;
-
-    const mesh = new THREE.Mesh(dropGeo, dropMat.clone());
-    mesh.scale.setScalar(r);
-    mesh.position.set(x, y, z);
-    scene.add(mesh);
-    dropMeshes.push(mesh);
-
-    const drop = { mesh, x, y, z, vx, vy, vz, r,
-      life: 0,
-      maxLife: type === 'mist' ? 180 + Math.random() * 80
-             : type === 'small'? 280 + Math.random() * 80
-             : 380 + Math.random() * 100,
-      evapRate: type === 'mist' ? 0.0006 : type === 'small' ? 0.00025 : 0.00008,
-      currentR: r, type,
-    };
-    drops.push(drop);
-    return drop;
+  const dropSlots = new Array(MAX_DROPS).fill(false);
+  function findSlot() {
+    for (let i = 0; i < MAX_DROPS; i++) if (!dropSlots[i]) return i;
+    return -1;
   }
 
-  function updateDrops(progress) {
-    const breakup = Math.max(0, (progress - 0.20) / 0.35);
+  function createDrop(x, y, z, r, type, vx, vy, vz) {
+    const slot = findSlot();
+    if (slot < 0) return;
+    const d = new Droplet(x, y, z, r, type, vx, vy, vz);
+    d.slot = slot;
+    dropSlots[slot] = true;
+    drops.push(d);
+  }
 
-    // spawn
-    const spawnRate = breakup < 0.08 ? 0 : Math.floor(breakup * 6);
-    for (let s = 0; s < spawnRate; s++) spawnDrop(progress);
+  function syncDropGPU() {
+    for (const d of drops) {
+      const s = d.slot;
+      dPos[s*3]   = d.x; dPos[s*3+1] = d.y; dPos[s*3+2] = d.z;
+      dSzX[s]     = d.currentR * (d.aspect || 1);
+      dSzY[s]     = d.currentR / (d.aspect || 1);
+      dAlpha[s]   = d.alpha;
+      dType[s]    = d.type === 'primary' ? 0 : d.type === 'satellite' ? 1 : 2;
+    }
+    dropGeo.attributes.position.needsUpdate = true;
+    dropGeo.attributes.aSzX.needsUpdate     = true;
+    dropGeo.attributes.aSzY.needsUpdate     = true;
+    dropGeo.attributes.aAlpha.needsUpdate   = true;
+    dropGeo.attributes.aType.needsUpdate    = true;
+  }
 
-    // update each
+  function updateDropPool() {
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i];
-      d.life++;
-      d.x += d.vx; d.y += d.vy; d.z += d.vz;
-      d.vy -= 0.0008; // gravity
-      d.vx *= 0.997; d.vy *= 0.997; d.vz *= 0.997;
-      d.currentR = Math.max(0.005, d.r - d.evapRate * d.life);
-
-      const fade = Math.min(1, d.life / 20) *
-                   Math.max(0, 1 - (d.life - d.maxLife + 40) / 40);
-
-      d.mesh.position.set(d.x, d.y, d.z);
-      d.mesh.scale.setScalar(d.currentR);
-      d.mesh.material.opacity = fade * (d.type === 'mist' ? 0.35 : 0.8);
-
-      if (d.life >= d.maxLife || d.currentR <= 0.005 || d.y < -10) {
-        scene.remove(d.mesh);
-        d.mesh.material.dispose();
+      const alive = d.update();
+      if (!alive) {
+        dPos[d.slot*3+1] = -30;
+        dAlpha[d.slot]   = 0;
+        dropSlots[d.slot]= false;
         drops.splice(i, 1);
-        dropMeshes.splice(i, 1);
+      }
+    }
+    syncDropGPU();
+  }
+
+  /* ── Handle pinch-off events ─────────────────────────────────── */
+  function handlePinchOff(events, breakup) {
+    for (const ev of events) {
+      // Volume conservation: primary drop radius
+      const lambda  = (2 * Math.PI) / PHYSICS.perturbWave;
+      const r_drop  = Math.pow(1.5 * PHYSICS.jetRadius * PHYSICS.jetRadius * lambda, 1/3);
+      const r_clamp = Math.min(r_drop, 0.45);
+
+      // Jet velocity at this location (increases downward)
+      const jetVy = -(0.02 + ev.frac * 0.06);
+      const vxOff = (Math.random() - 0.5) * 0.04 * breakup;
+      const vzOff = (Math.random() - 0.5) * 0.03 * breakup;
+
+      createDrop(ev.x + vxOff, ev.y, vzOff, r_clamp, 'primary',
+        vxOff * 1.5, jetVy, vzOff * 1.5);
+
+      // Satellite drop (beads-on-string artifact, ~40-55% of primary r)
+      if (Math.random() < PHYSICS.satelliteProb) {
+        const r_sat = r_clamp * (0.38 + Math.random() * 0.18);
+        createDrop(ev.x + (Math.random()-0.5)*0.15, ev.y + 0.2,
+          (Math.random()-0.5)*0.1, r_sat, 'satellite',
+          (Math.random()-0.5)*0.06, jetVy * 0.85, (Math.random()-0.5)*0.05);
+      }
+
+      // Micro-droplet cloud (aerosol from tip streaming)
+      const nMicro = 2 + Math.floor(Math.random() * 4);
+      for (let m = 0; m < nMicro; m++) {
+        createDrop(
+          ev.x + (Math.random()-0.5)*0.4,
+          ev.y + (Math.random()-0.5)*0.3,
+          (Math.random()-0.5)*0.2,
+          0.018 + Math.random() * 0.04, 'micro',
+          (Math.random()-0.5)*0.18, jetVy*0.4 + (Math.random()-0.5)*0.08,
+          (Math.random()-0.5)*0.18);
       }
     }
   }
 
-  // ── LIGAMENT LINES ────────────────────────────────────────────
-  const ligaments = [];
-  const MAX_LIGS  = 40;
+  /* ── continuous dripping from nozzle (pre-breakup) ── */
+  let dripTimer = 0;
+  function emitDrips(appear, breakup) {
+    dripTimer++;
+    const rate = breakup > 0.05 ? 0 : Math.floor(appear * 12);
+    if (dripTimer % Math.max(1, 18 - rate) !== 0) return;
+    // Single large drip forming at nozzle tip
+    const r = 0.08 + Math.random() * 0.06;
+    createDrop(0.24, 4.3, 0, r, 'primary', (Math.random()-0.5)*0.012, -0.012, (Math.random()-0.5)*0.008);
+  }
 
-  function spawnLigament(progress) {
-    if (ligaments.length >= MAX_LIGS) return;
-    const breakup = Math.max(0, (progress - 0.22) / 0.32);
-    if (breakup < 0.05) return;
+  /* ══════════════════════════════════════════════════════════════
+     LIGAMENT THREADS
+     Beads-on-string structure: thin thread connecting droplets
+  ══════════════════════════════════════════════════════════════ */
+  const threads = [];
+  const MAX_THREADS = 30;
 
-    const pts = [];
-    const ox = (Math.random() - 0.5) * breakup * 3;
-    const oy = -1 - Math.random() * 5;
-    const angle = Math.PI * (0.3 + Math.random() * 0.4) * (Math.random() < 0.5 ? 1 : -1);
-    const len   = 0.8 + Math.random() * 2.5 * breakup;
-    const segs  = 8;
+  function spawnThread(x, y, breakup) {
+    if (threads.length >= MAX_THREADS) return;
+    const segs  = 20;
+    const len   = 0.4 + Math.random() * 1.8 * breakup;
+    const angle = -Math.PI/2 + (Math.random()-0.5) * 1.2;
+    const pts   = [];
+    const radii = [];
     for (let i = 0; i <= segs; i++) {
       const t = i / segs;
+      // Thread profile: thin in middle, bulges at bead ends (polymer string)
+      const profile = 0.012 + 0.055 * (Math.pow(2*t-1, 4)); // catenary-like
       pts.push(new THREE.Vector3(
-        ox + Math.cos(angle) * len * t + (Math.random() - 0.5) * 0.15,
-        oy + Math.sin(angle) * len * t,
-        (Math.random() - 0.5) * 0.5
+        x + Math.cos(angle)*len*t + snoise2(t*6, angle)*0.06,
+        y + Math.sin(angle)*len*t,
+        (Math.random()-0.5)*0.1
       ));
+      radii.push(profile);
     }
-    const geo  = new THREE.BufferGeometry().setFromPoints(pts);
-    const mat  = new THREE.LineBasicMaterial({
-      color: 0x81d4fa,
-      transparent: true,
-      opacity: 0.75,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x90caf9, transparent: true, opacity: 0.7,
+      blending: THREE.AdditiveBlending, depthWrite: false, linewidth: 1,
     });
     const line = new THREE.Line(geo, mat);
     scene.add(line);
-    ligaments.push({ line, life: 0, maxLife: 90 + Math.random() * 60 });
+    threads.push({ line, life: 0, maxLife: 60 + Math.random() * 50 });
   }
 
-  function updateLigaments(progress) {
-    const breakup = Math.max(0, (progress - 0.22) / 0.32);
-    if (breakup > 0.05 && ligaments.length < MAX_LIGS && Math.random() < 0.25) {
-      spawnLigament(progress);
+  function updateThreads(breakup) {
+    if (breakup > 0.08 && threads.length < MAX_THREADS && Math.random() < 0.18 * breakup) {
+      const ox = (Math.random()-0.5)*1.5*breakup;
+      const oy = 3 - Math.random() * 9 * breakup;
+      spawnThread(ox, oy, breakup);
     }
-    for (let i = ligaments.length - 1; i >= 0; i--) {
-      const l = ligaments[i];
-      l.life++;
-      const fade = Math.min(1, l.life / 15) *
-                   Math.max(0, 1 - (l.life - l.maxLife + 20) / 20);
-      l.line.material.opacity = fade * 0.75;
-      if (l.life >= l.maxLife) {
-        scene.remove(l.line);
-        l.line.geometry.dispose();
-        l.line.material.dispose();
-        ligaments.splice(i, 1);
+    for (let i = threads.length-1; i >= 0; i--) {
+      const th = threads[i];
+      th.life++;
+      const f = Math.min(1, th.life/10) * Math.max(0, 1-(th.life-th.maxLife+15)/15);
+      th.line.material.opacity = f * 0.7;
+      if (th.life >= th.maxLife) {
+        scene.remove(th.line);
+        th.line.geometry.dispose();
+        th.line.material.dispose();
+        threads.splice(i, 1);
       }
     }
   }
 
-  // ── LIGHTS ───────────────────────────────────────────────────
-  const ambLight = new THREE.AmbientLight(0x4fc3f7, 0.4);
-  scene.add(ambLight);
-  const ptLight = new THREE.PointLight(0x4fc3f7, 2.5, 30);
-  ptLight.position.set(0, 3, 8);
-  scene.add(ptLight);
-  const ptLight2 = new THREE.PointLight(0x00b4d8, 1.5, 25);
-  ptLight2.position.set(-4, -3, 5);
-  scene.add(ptLight2);
-
-  // ── BACKGROUND STARS / MIST FIELD ────────────────────────────
-  const STAR_COUNT = 600;
-  const starPositions = new Float32Array(STAR_COUNT * 3);
-  for (let i = 0; i < STAR_COUNT; i++) {
-    starPositions[i * 3]     = (Math.random() - 0.5) * 40;
-    starPositions[i * 3 + 1] = (Math.random() - 0.5) * 30;
-    starPositions[i * 3 + 2] = (Math.random() - 0.5) * 20 - 5;
+  /* ══════════════════════════════════════════════════════════════
+     ATMOSPHERE / MIST HAZE
+  ══════════════════════════════════════════════════════════════ */
+  const MIST_N  = 500;
+  const mistPos = new Float32Array(MIST_N * 3);
+  const mistPh  = new Float32Array(MIST_N);
+  for (let i = 0; i < MIST_N; i++) {
+    mistPos[i*3]   = (Math.random()-.5)*30;
+    mistPos[i*3+1] = (Math.random()-.5)*24;
+    mistPos[i*3+2] = (Math.random()-.5)*12 - 4;
+    mistPh[i]      = Math.random()*Math.PI*2;
   }
-  const starGeo = new THREE.BufferGeometry();
-  starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-  const starMat = new THREE.PointsMaterial({
-    color: 0xb3e5fc,
-    size: 0.04,
-    transparent: true,
-    opacity: 0.25,
-    sizeAttenuation: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
+  const mistGeo = new THREE.BufferGeometry();
+  mistGeo.setAttribute('position', new THREE.BufferAttribute(mistPos, 3));
+  mistGeo.setAttribute('aPhase',   new THREE.BufferAttribute(mistPh, 1));
+  const MIST_VERT = `
+    attribute float aPhase;
+    uniform float uT;
+    varying float vA;
+    void main(){
+      vec3 p=position;
+      p.x += sin(uT*.28+aPhase)*.8;
+      p.y += cos(uT*.18+aPhase*1.4)*.5;
+      vA = .04+.04*sin(uT*.4+aPhase);
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+      gl_PointSize=2.+sin(aPhase)*.8;
+    }`;
+  const MIST_FRAG = `
+    varying float vA;
+    void main(){
+      vec2 uv=gl_PointCoord-.5;
+      float d=length(uv);
+      if(d>.5)discard;
+      gl_FragColor=vec4(.6,.88,1.,vA*(1.-d*2.));
+    }`;
+  const mistUni = { uT: { value: 0 } };
+  const mistMat = new THREE.ShaderMaterial({
+    vertexShader: MIST_VERT, fragmentShader: MIST_FRAG, uniforms: mistUni,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
   });
-  scene.add(new THREE.Points(starGeo, starMat));
+  scene.add(new THREE.Points(mistGeo, mistMat));
 
-  // ── JET GEOMETRY UPDATE ───────────────────────────────────────
-  function updateJet(progress, t) {
-    const appear  = Math.min(1, progress / 0.22);
-    const breakup = Math.max(0, Math.min(1, (progress - 0.22) / 0.32));
-    const pos = jetGeo.attributes.position;
+  /* ══════════════════════════════════════════════════════════════
+     LIGHTS
+  ══════════════════════════════════════════════════════════════ */
+  scene.add(new THREE.AmbientLight(0x3060a0, 0.6));
+  const ptA = new THREE.PointLight(0x4fc3f7, 4, 40); ptA.position.set(0, 6, 12); scene.add(ptA);
+  const ptB = new THREE.PointLight(0x0277bd, 2.5, 30); ptB.position.set(-6,-2, 8); scene.add(ptB);
+  const ptC = new THREE.PointLight(0x00e5ff, 2, 22); ptC.position.set(5, 3, 7); scene.add(ptC);
 
-    for (let i = 0; i < JET_COUNT; i++) {
-      const frac = (i / JET_COUNT);
-      const y    = 4 - frac * 10 * appear;
+  /* ══════════════════════════════════════════════════════════════
+     2D NOZZLE OVERLAY CANVAS
+  ══════════════════════════════════════════════════════════════ */
+  const ov = document.createElement('canvas');
+  ov.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;';
+  canvas.parentElement.appendChild(ov);
+  const oc = ov.getContext('2d');
+  function resizeOv() {
+    const dpr = window.devicePixelRatio||1;
+    ov.width  = canvas.offsetWidth*dpr;
+    ov.height = canvas.offsetHeight*dpr;
+    oc.setTransform(dpr,0,0,dpr,0,0);
+  }
+  resizeOv(); window.addEventListener('resize', resizeOv);
 
-      // Rayleigh wobble growing with breakup
-      const wobX = breakup * 1.8 * frac * Math.sin(frac * 18 + t * 2.5 + jetPhases[i]);
-      const wobZ = breakup * 0.6 * frac * Math.cos(frac * 12 + t * 1.8 + jetPhases[i]);
+  function drawNozzle(t, appear) {
+    oc.clearRect(0,0,canvas.offsetWidth,canvas.offsetHeight);
+    if (appear < 0.05) return;
+    const W = canvas.offsetWidth;
+    const cx = W*0.5;
 
-      pos.setXYZ(i, wobX, y, wobZ);
+    oc.save();
+    oc.globalAlpha = appear;
+    oc.shadowBlur = 20; oc.shadowColor='#4fc3f7';
+
+    // pipe
+    oc.strokeStyle='rgba(79,195,247,0.6)';
+    oc.lineWidth=3;
+    oc.beginPath(); oc.moveTo(cx-60,30); oc.lineTo(cx+60,30); oc.stroke();
+    oc.beginPath(); oc.moveTo(cx+26,30); oc.lineTo(cx+26,65); oc.stroke();
+
+    // nozzle tip
+    oc.strokeStyle='rgba(79,195,247,0.95)';
+    oc.lineWidth=4;
+    oc.beginPath(); oc.moveTo(cx+14,65); oc.lineTo(cx+38,65); oc.stroke();
+
+    // hanging droplet forming at tip (Rayleigh drip)
+    const dripT = (t % 2.8) / 2.8;  // 0→1 over 2.8s drip cycle
+    const rDrip = dripT < 0.7
+      ? 3 + dripT * 8                      // growing bead
+      : 3 + 0.7 * 8 - (dripT - 0.7) * 20; // falling detachment
+    const yDrip = 65 + dripT * 14;
+
+    if (rDrip > 0.5) {
+      const grd = oc.createRadialGradient(cx+26-rDrip*.3, yDrip-rDrip*.3, 0, cx+26, yDrip, rDrip*1.5);
+      grd.addColorStop(0,'rgba(220,248,255,0.95)');
+      grd.addColorStop(0.4,'rgba(79,195,247,0.88)');
+      grd.addColorStop(1,'rgba(13,71,161,0.5)');
+      oc.beginPath(); oc.arc(cx+26, yDrip, Math.max(0,rDrip), 0, Math.PI*2);
+      oc.fillStyle = grd; oc.fill();
+
+      // neck thread at detachment
+      if (dripT > 0.55 && dripT < 0.78) {
+        const neck = (0.78 - dripT) / 0.23;
+        oc.strokeStyle = `rgba(129,212,250,${neck*0.8})`;
+        oc.lineWidth = neck * 2;
+        oc.beginPath(); oc.moveTo(cx+26, 65); oc.lineTo(cx+26, yDrip-rDrip);
+        oc.stroke();
+      }
     }
-    pos.needsUpdate = true;
-    jetMat.opacity = appear * (1 - breakup * 0.65);
-    jetPoints.visible = appear > 0.01;
+    oc.restore();
   }
 
-  // ── GSAP ScrollTrigger integration ───────────────────────────
-  // Animate camera slightly with scroll for parallax depth feel
+  /* ══════════════════════════════════════════════════════════════
+     GSAP CAMERA PARALLAX
+  ══════════════════════════════════════════════════════════════ */
   if (window.gsap && window.ScrollTrigger) {
     gsap.registerPlugin(ScrollTrigger);
-
     gsap.to(camera.position, {
-      z: 14,
-      y: -1.5,
+      z: 16, y: -1,
       ease: 'none',
-      scrollTrigger: {
-        trigger: '#hero',
-        start: 'top top',
-        end: 'bottom top',
-        scrub: 1.5,
-      },
-    });
-
-    // gentle camera sway
-    gsap.to(camera.rotation, {
-      x: 0.06,
-      ease: 'none',
-      scrollTrigger: {
-        trigger: '#hero',
-        start: 'top top',
-        end: 'bottom top',
-        scrub: 2,
-      },
+      scrollTrigger: { trigger:'#hero', start:'top top', end:'bottom top', scrub:2 },
     });
   }
 
-  // ── RENDER LOOP ───────────────────────────────────────────────
-  let frame = 0;
-  const clock = new THREE.Clock();
+  /* ══════════════════════════════════════════════════════════════
+     MAIN LOOP
+  ══════════════════════════════════════════════════════════════ */
+  const clock  = new THREE.Clock();
+  let lastPinchResetTime = -999;
+  let t_breakup_start   = -1;
 
   function animate() {
     requestAnimationFrame(animate);
-    frame++;
-    const t   = clock.getElapsedTime();
+    const t = clock.getElapsedTime();
     updateScroll();
-    const p = scrollProgress;
+    const p       = scrollP;
+    const appear  = Math.min(1, p / 0.18);
+    const breakup = Math.max(0, Math.min(1, (p - 0.18) / 0.38));
 
-    // jet
-    updateJet(p, t);
-
-    // ligaments
-    if (frame % 6 === 0) updateLigaments(p);
-    else {
-      // still update life/fade each frame
-      for (let i = ligaments.length - 1; i >= 0; i--) {
-        const l = ligaments[i];
-        l.life++;
-        const fade = Math.min(1, l.life / 15) *
-                     Math.max(0, 1 - (l.life - l.maxLife + 20) / 20);
-        l.line.material.opacity = fade * 0.75;
-        if (l.life >= l.maxLife) {
-          scene.remove(l.line);
-          l.line.geometry.dispose();
-          l.line.material.dispose();
-          ligaments.splice(i, 1);
-        }
-      }
+    // Reset pinched nodes when breakup restarts (scroll back to top)
+    if (breakup < 0.02 && t - lastPinchResetTime > 2) {
+      jetNodes.forEach(n => { n.pinched = false; n.r = PHYSICS.jetRadius; });
+      lastPinchResetTime = t;
+      t_breakup_start    = -1;
     }
+    if (breakup > 0.02 && t_breakup_start < 0) t_breakup_start = t;
 
-    // droplets (every 2nd frame for perf)
-    if (frame % 2 === 0) updateDrops(p);
+    const t_rel = t_breakup_start > 0 ? t - t_breakup_start : 0;
 
-    // gentle point light pulse
-    ptLight.intensity = 2.2 + 0.6 * Math.sin(t * 1.4);
-    ptLight.position.x = Math.sin(t * 0.4) * 2;
+    // Evolve jet instability
+    evolveJet(breakup, t_rel, 1/60);
 
-    // draw 2D nozzle overlay
-    drawNozzle();
+    // Detect and handle pinch-off
+    const events = detectPinchOff(breakup);
+    if (events.length) handlePinchOff(events, breakup);
+
+    // Continuous dripping
+    emitDrips(appear, breakup);
+
+    // Update jet geometry
+    updateJetGeometry(appear);
+
+    // Threads
+    updateThreads(breakup);
+
+    // Droplets
+    updateDropPool();
+
+    // Mist
+    mistUni.uT.value = t;
+
+    // Animate lights
+    ptA.intensity = 3.8 + 1.2 * Math.sin(t*1.2);
+    ptA.position.x = Math.sin(t*0.3)*2;
+    ptC.position.set(5+Math.cos(t*0.4)*2, 3+Math.sin(t*0.55)*2, 7);
+
+    // Nozzle overlay
+    drawNozzle(t, appear > 0.05 ? 1 : appear / 0.05);
 
     renderer.render(scene, camera);
   }
+
   animate();
 
 })();
