@@ -1,105 +1,66 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <style>
-        html{scroll-behavior:smooth;}
-    </style>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Amitesh K. Chaudhary</title>
-
-<link rel="stylesheet" href="style.css">
-
-<!-- Three.js CDN -->
-<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script> -->
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amitesh K. Chaudhary | PhD Portfolio</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
-
 <body>
+    <canvas id="flow-canvas"></canvas>
 
-<!-- <div id="bg"></div> -->
+    <nav>
+        <div class="nav-container">
+            <a href="#home" class="logo">AKC</a>
+            <div class="links">
+                <a href="#about">About</a>
+                <a href="#research">Research</a>
+                <a href="#skills">Skills</a>
+                <a href="#contact">Contact</a>
+            </div>
+        </div>
+    </nav>
 
-<header class="hero">
-    <h1>Amitesh K. Chaudhary</h1>
-    <p class="tagline">
-        Multiphase Flows • Atomization • Heat & Mass Transfer
-    </p>
-    <div class="cta">
-        <a href="#research">Explore Research</a>
-        <a href="assets/CV.pdf" download>Download CV</a>
-    </div>
-</header>
+    <header id="home" class="hero">
+        <div class="glass-card fade-in">
+            <h1>Amitesh K. Chaudhary</h1>
+            <p class="tagline">PhD | Multiphase Flows | Atomization | Heat & Mass Transfer</p>
+            <p class="institution">IISc Bangalore</p>
+            <div class="cta-group">
+                <a href="#research" class="btn-primary">Explore Research</a>
+                <a href="#" class="btn-secondary">Download CV</a>
+            </div>
+        </div>
+    </header>
 
-<nav>
-    <a href="#about">About</a>
-    <a href="#research">Research</a>
-    <a href="#deep">Deep Dive</a>
-    <a href="#skills">Skills</a>
-    <a href="#contact">Contact</a>
-</nav>
+    <section id="about" class="fade-in">
+        <div class="content-wrapper">
+            <h2>About</h2>
+            <p>PhD from IISc Bangalore specializing in experimental and computational investigation of atomization and droplet evaporation. My work bridges physics-based modeling with real-world engineering systems such as gas turbines and spray drying.</p>
+        </div>
+    </section>
 
-<section id="about" class="fade-in">
-<h2>About</h2>
-<p>
-PhD from IISc Bangalore specializing in experimental and computational
-investigation of atomization and droplet evaporation.
-My work bridges physics-based modeling with real-world engineering systems
-such as gas turbines and spray drying.
-</p>
-</section>
+    <section id="research" class="fade-in">
+        <div class="content-wrapper">
+            <h2>Research Highlights</h2>
+            <div class="grid">
+                <div class="project-card">
+                    <h3>Rotary Atomization</h3>
+                    <p>Viscoelastic breakup and droplet formation physics.</p>
+                </div>
+                <div class="project-card">
+                    <h3>Droplet Evaporation</h3>
+                    <p>Coupled heat-mass transfer modeling.</p>
+                </div>
+                <div class="project-card">
+                    <h3>Fuel Spray</h3>
+                    <p>Laser diagnostics in combustor systems.</p>
+                </div>
+            </div>
+        </div>
+    </section>
 
-<section id="research" class="fade-in">
-<h2>Research Highlights</h2>
-
-<div class="card">
-    <img src="assets/atomization.jpg">
-    <h3>Rotary Atomization</h3>
-    <p>Viscoelastic breakup and droplet formation physics</p>
-</div>
-
-<div class="card">
-    <img src="assets/droplet.jpg">
-    <h3>Droplet Evaporation</h3>
-    <p>Coupled heat-mass transfer modeling</p>
-    <a href="pages/droplet.html">Deep Dive →</a>
-</div>
-
-<div class="card">
-    <img src="assets/spray.jpg">
-    <h3>Fuel Spray in Crossflow</h3>
-    <p>Laser diagnostics in combustor systems</p>
-</div>
-
-</section>
-
-<section id="deep" class="fade-in">
-<h2>Research Philosophy</h2>
-<p>
-I combine high-fidelity experiments with reduced-order modeling
-to understand multiphase systems across scales—from droplet physics
-to industrial spray systems.
-</p>
-</section>
-
-<section id="skills" class="fade-in">
-<h2>Technical Expertise</h2>
-<div class="grid">
-<div>CFD (Fluent, OpenFOAM, COMSOL)</div>
-<div>Python / Machine Learning</div>
-<div>Laser Diagnostics & Imaging</div>
-<div>Multiphase Modeling</div>
-</div>
-</section>
-
-<section id="contact" class="fade-in">
-<h2>Contact</h2>
-<p>Email: amiteshch93@gmail.com</p>
-<p>
-<a href="https://www.linkedin.com/in/amitesh-kch">LinkedIn</a>
-</p>
-</section>
-
-<script src="script.js"></script>
-
+    <script src="script.js"></script>
 </body>
 </html>
