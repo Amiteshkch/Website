@@ -1,56 +1,58 @@
-// ===== 🌊 PARTICLE FLOW BACKGROUND =====
-const canvas = document.createElement("canvas");
-canvas.id = "bg";
-document.body.appendChild(canvas);
-
-const ctx = canvas.getContext("2d");
-
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
+const canvas = document.getElementById('flow-canvas');
+const ctx = canvas.getContext('2d');
 let particles = [];
 
-for (let i = 0; i < 120; i++) {
-    particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4
-    });
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
+window.addEventListener('resize', resize);
+resize();
+
+class Particle {
+    constructor() {
+        this.reset();
+    }
+    reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.vx = (Math.random() - 0.5) * 0.5;
+        this.vy = (Math.random() - 0.5) * 0.5;
+        this.life = Math.random() * 100;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+    }
+    draw() {
+        ctx.fillStyle = 'rgba(0, 210, 255, 0.3)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+for (let i = 0; i < 150; i++) particles.push(new Particle());
 
 function animate() {
-    ctx.fillStyle = "rgba(11,15,26,0.2)";
+    ctx.fillStyle = 'rgba(5, 7, 10, 0.1)'; // Creating a "trail" effect
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     particles.forEach(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-        ctx.fillStyle = "#38bdf8";
-        ctx.fill();
+        p.update();
+        p.draw();
     });
-
     requestAnimationFrame(animate);
 }
-
 animate();
 
-
-// ===== ✨ SCROLL ANIMATION =====
-const observer = new IntersectionObserver(entries => {
+// Intersection Observer for Scroll Animations
+const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
-            entry.target.classList.add("show");
+            entry.target.classList.add('visible');
         }
     });
-});
+}, { threshold: 0.1 });
 
-document.querySelectorAll(".fade-in").forEach(el => {
-    observer.observe(el);
-});
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
