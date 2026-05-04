@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Amitesh K. Chaudhary — Spray Drying Research</title>
+  <meta name="theme-color" content="#0c1a2e" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=Barlow:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -54,12 +55,6 @@
 
   <!-- Lenis smooth scroll — MIT license -->
   <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"></script>
-
-  <!-- React + Babel for Tweaks panel -->
-  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-  <script type="text/babel" src="tweaks-panel.jsx"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -592,6 +587,52 @@
       .proto-grid { grid-template-columns: 1fr; }
       #contact { grid-template-columns: 1fr; }
     }
+
+    /* ── PRODUCTION POLISH PATCHES ───────────────────────────── */
+    #spray-canvas {
+      opacity: 0.72;
+      filter: saturate(0.9) contrast(0.95);
+    }
+
+    .hero-sticky::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background:
+        radial-gradient(circle at 68% 45%, rgba(79,195,247,0.08), transparent 34%),
+        linear-gradient(90deg, rgba(7,17,30,0.92) 0%, rgba(7,17,30,0.72) 42%, rgba(7,17,30,0.18) 100%),
+        linear-gradient(180deg, rgba(7,17,30,0.25) 0%, rgba(7,17,30,0.65) 100%);
+    }
+
+    .hero-left,
+    .hero-right,
+    .phase-label,
+    .scroll-hint {
+      z-index: 5;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+      }
+      #spray-canvas { opacity: 0.35; }
+      .scroll-hint { display: none; }
+    }
+
+    @media (max-width: 768px) {
+      #hero { height: 135vh; }
+      .hero-name { font-size: clamp(2.6rem, 13vw, 4.2rem); }
+      .hero-bio { max-width: 100%; font-size: 0.92rem; }
+      #spray-canvas { opacity: 0.42; }
+      .phase-label { right: 20px; bottom: 84px; }
+      .scroll-hint { bottom: 20px; }
+    }
+
   </style>
 </head>
 <body>
@@ -816,7 +857,7 @@
         <li>Ligament-to-droplet fraction quantified as function of concentration and temperature</li>
         <li>High Ohnesorge number regime characterized — 2 international conference papers</li>
         <li>Effect of solution temperature (298–353 K) on spray characteristics documented</li>
-        <!-- <li>Two journal manuscripts in preparation (Exp. Thermal &amp; Fluid Sci.; JNNFM)</li> -->
+        <li>Two journal manuscripts in preparation (Exp. Thermal &amp; Fluid Sci.; JNNFM)</li>
       </ul>
       <div class="method-chips">
         <span class="method-chip">Shadowgraphy</span>
@@ -905,7 +946,7 @@
         <li>Sensitivity analysis on air temperature, humidity, and droplet size</li>
         <li>Model validated against experimental pendant droplet data</li>
         <li>Results directly fed into spray dryer residence time design</li>
-        <!-- <li>Journal manuscript in preparation (Int. J. Heat &amp; Mass Transfer)</li> -->
+        <li>Journal manuscript in preparation (Int. J. Heat &amp; Mass Transfer)</li>
       </ul>
       <div class="method-chips">
         <span class="method-chip">Backlit Imaging</span>
@@ -1089,8 +1130,36 @@
     </div>
   </div>
 
-
-  
+  <div class="pub-section-label">Journal Articles — In Preparation</div>
+  <div class="pub-list">
+    <div class="pub-item">
+      <div class="pub-num">J1</div>
+      <div class="pub-body">
+        <div class="pub-title">"Atomization of viscoelastic liquid jets using a rotary atomizer"</div>
+        <div class="pub-authors">Amitesh K. Chaudhary, R.V. Ravikrishna</div>
+        <div class="pub-venue">Experimental Thermal and Fluid Science (to be submitted)</div>
+      </div>
+      <div class="pub-badge badge-sub">In Prep.</div>
+    </div>
+    <div class="pub-item">
+      <div class="pub-num">J2</div>
+      <div class="pub-body">
+        <div class="pub-title">"Effect of temperature on the rheology and spray characteristics of polymer solutions"</div>
+        <div class="pub-authors">Amitesh K. Chaudhary, R.V. Ravikrishna</div>
+        <div class="pub-venue">Journal of Non-Newtonian Fluid Mechanics (to be submitted)</div>
+      </div>
+      <div class="pub-badge badge-sub">In Prep.</div>
+    </div>
+    <div class="pub-item">
+      <div class="pub-num">J3</div>
+      <div class="pub-body">
+        <div class="pub-title">"Experimental and numerical investigation on the effect of air temperature and humidity on single droplet evaporation"</div>
+        <div class="pub-authors">Amitesh K. Chaudhary, R.V. Ravikrishna</div>
+        <div class="pub-venue">International Journal of Heat and Mass Transfer (to be submitted)</div>
+      </div>
+      <div class="pub-badge badge-sub">In Prep.</div>
+    </div>
+  </div>
 </section>
 
 <hr class="rule" />
@@ -1113,7 +1182,7 @@
 
   <div>
     <div class="contact-details">
-      <!-- <div class="contact-row">
+      <div class="contact-row">
         <div class="contact-icon">✉</div>
         <div class="contact-info">
           <div class="contact-type">Institutional Email</div>
@@ -1126,7 +1195,7 @@
           <div class="contact-type">Personal Email</div>
           <div class="contact-val"><a href="mailto:amiteshch93@gmail.com">amiteshch93@gmail.com</a></div>
         </div>
-      </div> -->
+      </div>
       <div class="contact-row">
         <div class="contact-icon">in</div>
         <div class="contact-info">
@@ -1134,13 +1203,13 @@
           <div class="contact-val"><a href="https://www.linkedin.com/in/amitesh-kch" target="_blank">linkedin.com/in/amitesh-kch</a></div>
         </div>
       </div>
-      <!-- <div class="contact-row">
+      <div class="contact-row">
         <div class="contact-icon">☎</div>
         <div class="contact-info">
           <div class="contact-type">Mobile</div>
           <div class="contact-val">+91 97529 05016</div>
         </div>
-      </div> -->
+      </div>
     </div>
 
     <a class="cv-download" href="uploads/PD_Amitesh_PhD.pdf" download>
@@ -1180,8 +1249,9 @@
   function onScroll() {
     if (!label) return;
     const hero      = document.getElementById('hero');
-    const maxScroll = hero ? hero.offsetHeight : window.innerHeight;
-    const progress  = Math.min(1, Math.max(0, window.scrollY / maxScroll));
+    const total = hero ? Math.max(1, hero.offsetHeight - window.innerHeight) : window.innerHeight;
+    const rect = hero ? hero.getBoundingClientRect() : { top: -window.scrollY };
+    const progress  = Math.min(1, Math.max(0, -rect.top / total));
 
     // hide once past hero
     label.style.opacity = progress > 0.96 ? '0' : '1';
@@ -1206,54 +1276,6 @@
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
 })();
-</script>
-
-<!-- TWEAKS PANEL -->
-<script type="text/babel">
-
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "accentColor": "oklch(0.62 0.18 220)",
-  "tealColor": "oklch(0.65 0.16 175)",
-  "heroFont": "Barlow Condensed",
-  "darkMode": false,
-  "showBars": true
-}/*EDITMODE-END*/;
-
-function TweaksApp() {
-  const result = useTweaks(TWEAK_DEFAULTS);
-  const tweaks = result?.tweaks ?? TWEAK_DEFAULTS;
-  const setTweak = result?.setTweak ?? (() => {});
-
-  React.useEffect(() => {
-    document.documentElement.style.setProperty('--accent', tweaks.accentColor);
-    document.documentElement.style.setProperty('--accent-teal', tweaks.tealColor);
-  }, [tweaks.accentColor, tweaks.tealColor]);
-
-  React.useEffect(() => {
-    document.querySelectorAll('.bar-fill').forEach(el => {
-      el.style.display = tweaks.showBars ? '' : 'none';
-    });
-    document.querySelectorAll('.bar-wrap').forEach(el => {
-      el.style.display = tweaks.showBars ? '' : 'none';
-    });
-  }, [tweaks.showBars]);
-
-  return (
-    <TweaksPanel title="Tweaks">
-      <TweakSection label="Colors">
-        <TweakColor label="Accent (Blue)" value={tweaks.accentColor} onChange={v => setTweak('accentColor', v)} />
-        <TweakColor label="Accent (Teal)" value={tweaks.tealColor} onChange={v => setTweak('tealColor', v)} />
-      </TweakSection>
-      <TweakSection label="Skills Section">
-        <TweakToggle label="Show skill bars" value={tweaks.showBars} onChange={v => setTweak('showBars', v)} />
-      </TweakSection>
-    </TweaksPanel>
-  );
-}
-
-const tweaksRoot = document.createElement('div');
-document.body.appendChild(tweaksRoot);
-ReactDOM.createRoot(tweaksRoot).render(<TweaksApp />);
 </script>
 
 </body>
