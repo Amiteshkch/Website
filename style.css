@@ -90,3 +90,27 @@ section {
     opacity: 1;
     transform: translateY(0);
 }
+
+#spray-canvas {
+  opacity: 0.72;
+  filter: saturate(0.9) contrast(0.95);
+}
+
+.hero-sticky::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    radial-gradient(circle at 68% 45%, rgba(79,195,247,0.08), transparent 34%),
+    linear-gradient(90deg, rgba(7,17,30,0.92) 0%, rgba(7,17,30,0.72) 42%, rgba(7,17,30,0.18) 100%),
+    linear-gradient(180deg, rgba(7,17,30,0.25) 0%, rgba(7,17,30,0.65) 100%);
+}
+
+.hero-left,
+.hero-right,
+.phase-label,
+.scroll-hint {
+  z-index: 5;
+}
