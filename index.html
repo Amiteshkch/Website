@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Amitesh K. Chaudhary — Spray Drying Research</title>
-  <meta name="theme-color" content="#0c1a2e" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=Barlow:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -56,6 +55,12 @@
   <!-- Lenis smooth scroll — MIT license -->
   <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"></script>
 
+  <!-- React + Babel for Tweaks panel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -67,9 +72,9 @@
       --accent-teal: oklch(0.65 0.16 175);
       --warm-white:  #f5f3ee;
       --off-white:   #ede9e0;
-      --text-dark:   #1a1f2e;
-      --text-mid:    #4a5568;
-      --text-light:  #8896a8;
+      --text-dark:   #14182a;
+      --text-mid:    #3a4456;
+      --text-light:  #5e6a7c;
       --rule:        #ddd8ce;
       --font-display: 'Barlow Condensed', sans-serif;
       --font-body:    'Barlow', sans-serif;
@@ -86,6 +91,33 @@
     }
 
     /* ── NAV ──────────────────────────────────────── */
+    /* Hero entrance — CSS keyframes (independent of GSAP) */
+    @keyframes heroRise {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes heroSlide {
+      from { opacity: 0; transform: translateX(24px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .hero-tag    { animation: heroRise  0.7s  0.20s ease-out both; }
+    .hero-name   { animation: heroRise  0.85s 0.35s ease-out both; }
+    .hero-degree { animation: heroRise  0.6s  0.65s ease-out both; }
+    .hero-bio    { animation: heroRise  0.6s  0.80s ease-out both; }
+    .hero-actions{ animation: heroRise  0.5s  0.95s ease-out both; }
+    .hero-stats  { animation: heroRise  0.5s  1.05s ease-out both; }
+    .hero-card   { animation: heroSlide 0.5s ease-out both; }
+    .hero-card:nth-of-type(1) { animation-delay: 0.50s; }
+    .hero-card:nth-of-type(2) { animation-delay: 0.60s; }
+    .hero-card:nth-of-type(3) { animation-delay: 0.70s; }
+    .hero-card:nth-of-type(4) { animation-delay: 0.80s; }
+    @media (prefers-reduced-motion: reduce) {
+      .hero-tag, .hero-name, .hero-degree, .hero-bio,
+      .hero-actions, .hero-stats, .hero-card {
+        animation: none; opacity: 1; transform: none;
+      }
+    }
+
     nav {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
       background: rgba(12,26,46,0.96);
@@ -104,7 +136,7 @@
     .nav-links { display: flex; gap: 32px; list-style: none; }
     .nav-links a {
       font-size: 0.78rem; font-weight: 500; letter-spacing: 0.1em;
-      text-transform: uppercase; color: rgba(255,255,255,0.6);
+      text-transform: uppercase; color: rgba(235,242,250,0.78);
       text-decoration: none; transition: color 0.2s;
     }
     .nav-links a:hover { color: #fff; }
@@ -120,21 +152,46 @@
     /* ── HERO ─────────────────────────────────────── */
     #hero {
       position: relative;
-      height: 200vh; /* tall scroll zone for animation */
-      background: transparent;
+      height: 100vh;
+      /* calm static navy field with soft directional glow — no animation */
+      background:
+        radial-gradient(ellipse 80% 60% at 78% 28%, rgba(79,170,225,0.10), transparent 70%),
+        radial-gradient(ellipse 60% 60% at 18% 78%, rgba(40,90,150,0.10), transparent 70%),
+        linear-gradient(180deg, #060d1c 0%, #0a162b 45%, #0c1a2e 100%);
     }
-    /* sticky inner frame that pins to viewport while user scrolls through the hero zone */
     .hero-sticky {
-      position: sticky; top: 0;
-      width: 100%; height: 100vh;
+      position: relative;
+      width: 100%; height: 100%;
       overflow: hidden;
     }
-    /* full-bleed canvas sits behind everything */
-    #spray-canvas {
+    /* (Legacy spray/water-bath canvases removed) */
+    /* Contrast scrim — darkens the left side behind hero text so the
+       white headline + body copy always read clearly over the animation */
+    .hero-overlay::before {
+      content: '';
       position: absolute; inset: 0;
-      width: 100%; height: 100%;
-      display: block;
+      background: linear-gradient(90deg,
+        rgba(5,11,22,0.82) 0%,
+        rgba(5,11,22,0.68) 28%,
+        rgba(5,11,22,0.42) 52%,
+        rgba(5,11,22,0.10) 78%,
+        rgba(5,11,22,0)    100%);
+      pointer-events: none;
+      z-index: 0;
     }
+    /* And a soft floor shading so stats row sits crisply */
+    .hero-overlay::after {
+      content: '';
+      position: absolute; left: 0; right: 0; bottom: 0; height: 38%;
+      background: linear-gradient(180deg,
+        rgba(5,11,22,0) 0%,
+        rgba(5,11,22,0.35) 60%,
+        rgba(5,11,22,0.55) 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    /* Water bath 2D physics canvas — main background video */
+    #water-bath-canvas { display: none !important; }
     /* content overlay */
     .hero-overlay {
       position: absolute; inset: 0;
@@ -213,16 +270,17 @@
     .hero-name .line2 { color: oklch(0.75 0.12 220); }
     .hero-degree {
       font-family: var(--font-display);
-      font-size: 1.2rem; font-weight: 400;
-      color: rgba(255,255,255,0.45);
+      font-size: 1.2rem; font-weight: 500;
+      color: rgba(220,235,250,0.70);
       letter-spacing: 0.06em; margin-bottom: 28px;
+      text-shadow: 0 1px 14px rgba(0,0,0,0.6);
     }
     .hero-bio {
-      font-size: 0.98rem; font-weight: 300;
-      color: rgba(255,255,255,0.65);
+      font-size: 0.98rem; font-weight: 400;
+      color: rgba(245,250,255,0.86);
       line-height: 1.75; max-width: 440px;
       margin-bottom: 36px;
-      text-shadow: 0 1px 12px rgba(0,0,0,0.5);
+      text-shadow: 0 1px 16px rgba(0,0,0,0.75);
     }
     .hero-actions { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; pointer-events: all; }
     .btn-primary {
@@ -257,7 +315,7 @@
     .stat-num span { color: rgba(79,195,247,0.9); }
     .stat-label {
       font-size: 0.7rem; font-weight: 500; letter-spacing: 0.1em;
-      text-transform: uppercase; color: rgba(255,255,255,0.35);
+      text-transform: uppercase; color: rgba(225,235,245,0.55);
       margin-top: 4px;
     }
 
@@ -283,8 +341,8 @@
       color: #fff; margin-bottom: 3px;
     }
     .hero-card-desc {
-      font-size: 0.78rem; font-weight: 300;
-      color: rgba(255,255,255,0.42); line-height: 1.5;
+      font-size: 0.78rem; font-weight: 400;
+      color: rgba(230,238,248,0.68); line-height: 1.55;
     }
 
     /* ── SECTION COMMONS ──────────────────────────── */
@@ -331,7 +389,7 @@
       color: var(--text-dark); margin-bottom: 12px; line-height: 1.2;
     }
     .rc-desc {
-      font-size: 0.9rem; font-weight: 300; color: var(--text-mid);
+      font-size: 0.92rem; font-weight: 400; color: var(--text-mid);
       line-height: 1.65; flex: 1; margin-bottom: 24px;
     }
     .rc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -342,6 +400,124 @@
       border: 1px solid var(--rule); padding: 3px 8px;
     }
     .tag.accent { background: oklch(0.62 0.18 220 / 0.1); color: var(--accent); border-color: oklch(0.62 0.18 220 / 0.3); }
+
+    /* ── INTERACTIVE PROCESS EXPLORER ───────────────── */
+    .process-explorer {
+      margin: 72px 0 64px;
+      display: grid;
+      grid-template-columns: minmax(260px, 0.78fr) minmax(520px, 1.22fr);
+      background: #07111e;
+      border: 1px solid rgba(20,35,64,0.28);
+      color: #fff;
+      overflow: hidden;
+    }
+    .process-intro {
+      padding: 36px;
+      background:
+        linear-gradient(180deg, rgba(79,195,247,0.11), rgba(79,195,247,0)),
+        #0b1729;
+      border-right: 1px solid rgba(255,255,255,0.08);
+    }
+    .process-kicker {
+      font-family: var(--font-mono); font-size: 0.64rem;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(129,212,250,0.82); margin-bottom: 12px;
+    }
+    .process-title {
+      font-family: var(--font-display); font-size: clamp(1.8rem, 3vw, 2.55rem);
+      font-weight: 700; line-height: 1.05; margin-bottom: 16px;
+    }
+    .process-copy {
+      color: rgba(230,238,248,0.78);
+      font-size: 0.94rem; line-height: 1.72;
+    }
+    .process-state {
+      margin-top: 28px; padding-top: 22px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--font-display); font-size: 0.95rem;
+      font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+      color: rgba(245,250,255,0.92);
+    }
+    .state-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #78d6a3;
+      box-shadow: 0 0 18px rgba(120,214,163,0.75);
+      flex: 0 0 auto;
+    }
+    .process-explorer[data-state="slow"] .state-dot {
+      background: #ffc857; box-shadow: 0 0 18px rgba(255,200,87,0.75);
+    }
+    .process-explorer[data-state="fast"] .state-dot,
+    .process-explorer[data-state="humid"] .state-dot {
+      background: #ff8a5b; box-shadow: 0 0 18px rgba(255,138,91,0.7);
+    }
+    .process-panel {
+      padding: 28px;
+      display: grid;
+      grid-template-columns: minmax(240px, 0.9fr) minmax(280px, 1.1fr);
+      gap: 28px;
+      align-items: stretch;
+    }
+    .process-controls {
+      display: flex; flex-direction: column; gap: 18px;
+    }
+    .process-control {
+      display: grid; gap: 9px;
+    }
+    .process-control span {
+      display: flex; justify-content: space-between; gap: 18px;
+      font-family: var(--font-display); font-size: 0.9rem;
+      font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: rgba(245,250,255,0.82);
+    }
+    .process-control strong {
+      font-family: var(--font-mono); font-size: 0.72rem;
+      color: rgba(129,212,250,0.95);
+      white-space: nowrap;
+    }
+    .process-control input[type="range"] {
+      width: 100%; accent-color: #4fc3f7; cursor: pointer;
+    }
+    .process-note {
+      margin-top: auto;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 16px;
+      color: rgba(230,238,248,0.62);
+      font-size: 0.82rem; line-height: 1.55;
+    }
+    .process-visual-panel {
+      display: grid; grid-template-rows: minmax(210px, 1fr) auto;
+      gap: 14px;
+    }
+    #process-canvas {
+      width: 100%; height: 100%;
+      min-height: 260px;
+      display: block;
+      background: #06101e;
+      border: 1px solid rgba(255,255,255,0.09);
+    }
+    .process-metrics {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .process-metric {
+      background: rgba(7,17,30,0.92);
+      padding: 14px 16px;
+      min-width: 0;
+    }
+    .process-metric span {
+      display: block;
+      font-family: var(--font-mono); font-size: 0.6rem;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(200,220,240,0.58);
+      margin-bottom: 5px;
+    }
+    .process-metric strong {
+      font-family: var(--font-display); font-size: 1.35rem;
+      line-height: 1; color: #fff;
+    }
 
     /* ── ATOMIZATION ──────────────────────────────── */
     #atomization { background: var(--off-white); }
@@ -356,13 +532,13 @@
       font-weight: 700; margin-bottom: 20px;
     }
     .study-content p {
-      font-size: 0.95rem; font-weight: 300; color: var(--text-mid);
+      font-size: 0.96rem; font-weight: 400; color: var(--text-mid);
       line-height: 1.75; margin-bottom: 16px;
     }
     .finding-list { list-style: none; margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
     .finding-list li {
       display: flex; gap: 12px; align-items: flex-start;
-      font-size: 0.88rem; font-weight: 300; color: var(--text-mid); line-height: 1.5;
+      font-size: 0.9rem; font-weight: 400; color: var(--text-mid); line-height: 1.55;
     }
     .finding-list li::before {
       content: '→'; color: var(--accent);
@@ -380,7 +556,7 @@
       border: 1px solid var(--rule);
       display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 8px;
-      min-height: 220px; padding: 24px;
+      min-height: 180px; padding: 20px;
     }
     .fig-label {
       font-family: var(--font-mono); font-size: 0.65rem;
@@ -401,14 +577,62 @@
       padding: 6px 14px; text-transform: uppercase;
     }
 
+    /* Pillar montage — atomization → evaporation → powder */
+    .pillar-montage {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      margin: 0 0 56px 0;
+    }
+    .montage-fig {
+      display: flex; flex-direction: column; gap: 6px; margin: 0;
+    }
+    .montage-slot {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #0a1628;
+      border: 1px solid rgba(79,195,247,0.18);
+      overflow: hidden;
+      --is-placeholder-bg: #0a1628;
+      --is-placeholder-fg: rgba(179,229,252,0.55);
+      --is-placeholder-border: rgba(79,195,247,0.18);
+    }
+    @media (max-width: 720px) {
+      .pillar-montage { grid-template-columns: 1fr; }
+    }
+
+    /* Research figures — small, paper-scale, centered with captions */
+    .research-figure {
+      display: flex; flex-direction: column; gap: 6px;
+      margin: 0;
+    }
+    .research-figure > .fig-placeholder,
+    .research-figure > [id="drop-bounce-fig"] {
+      width: 100%;
+    }
+    .fig-cap-top {
+      font-family: var(--font-mono); font-size: 0.66rem;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--accent);
+    }
+    .fig-cap-bot {
+      font-size: 0.78rem; color: var(--text-light); font-style: italic;
+      line-height: 1.5;
+    }
+    /* in dark sections, lighten figure caption colors */
+    #prototype .fig-cap-top, #prototype .fig-cap-bot { color: rgba(220,235,250,0.7); }
+    .study-visual { max-width: 520px; }
+    .mini-figs { grid-template-columns: 1fr 1fr; gap: 14px; }
+
     /* ── EVAPORATION ──────────────────────────────── */
     #evaporation { background: var(--warm-white); }
 
     /* ── PROTOTYPE ────────────────────────────────── */
     #prototype { background: var(--navy); color: #fff; }
     #prototype .section-title { color: #fff; }
-    #prototype .section-sub { color: rgba(255,255,255,0.5); }
-    #prototype .section-label { color: oklch(0.65 0.16 175); }
+    #prototype .section-sub { color: rgba(235,242,250,0.78); }
+    #prototype .section-label { color: oklch(0.72 0.16 175); }
     .proto-grid {
       display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start;
     }
@@ -418,22 +642,22 @@
       padding: 28px 28px; flex: 1;
     }
     .proto-card-title {
-      font-family: var(--font-display); font-size: 1.1rem; font-weight: 600;
+      font-family: var(--font-display); font-size: 1.1rem; font-weight: 700;
       letter-spacing: 0.06em; text-transform: uppercase;
-      color: oklch(0.65 0.16 175); margin-bottom: 12px;
+      color: oklch(0.78 0.14 175); margin-bottom: 12px;
     }
     .proto-card p {
-      font-size: 0.88rem; font-weight: 300;
-      color: rgba(255,255,255,0.55); line-height: 1.65;
+      font-size: 0.9rem; font-weight: 400;
+      color: rgba(235,242,250,0.82); line-height: 1.65;
     }
     .spec-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
     .spec-table tr { border-bottom: 1px solid rgba(255,255,255,0.07); }
     .spec-table td {
-      padding: 8px 0; font-size: 0.82rem; font-weight: 300;
-      color: rgba(255,255,255,0.55);
+      padding: 8px 0; font-size: 0.86rem; font-weight: 400;
+      color: rgba(235,242,250,0.82);
     }
     .spec-table td:first-child {
-      color: rgba(255,255,255,0.3); font-size: 0.7rem;
+      color: rgba(200,220,240,0.62); font-size: 0.7rem;
       letter-spacing: 0.1em; text-transform: uppercase;
       font-family: var(--font-mono); width: 45%;
     }
@@ -446,7 +670,7 @@
         rgba(255,255,255,0.04) 9px
       );
       border: 1px solid rgba(255,255,255,0.1);
-      min-height: 380px;
+      min-height: 360px;
       display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 10px;
     }
@@ -468,8 +692,8 @@
       font-weight: 600; color: var(--text-dark); margin-bottom: 4px;
     }
     .skill-detail {
-      font-size: 0.78rem; font-weight: 300; color: var(--text-mid);
-      line-height: 1.5;
+      font-size: 0.82rem; font-weight: 400; color: var(--text-mid);
+      line-height: 1.55;
     }
     .bar-wrap { height: 3px; background: var(--rule); margin-top: 6px; }
     .bar-fill { height: 3px; background: var(--accent); }
@@ -500,11 +724,11 @@
       line-height: 1.3; margin-bottom: 6px;
     }
     .pub-authors {
-      font-size: 0.82rem; font-weight: 300; color: var(--text-mid);
+      font-size: 0.86rem; font-weight: 400; color: var(--text-mid);
       margin-bottom: 4px;
     }
     .pub-venue {
-      font-size: 0.78rem; color: var(--text-light); font-style: italic;
+      font-size: 0.82rem; color: var(--text-light); font-style: italic;
     }
     .pub-badge {
       font-family: var(--font-mono); font-size: 0.6rem;
@@ -520,9 +744,9 @@
       color: #fff;
       display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;
     }
-    #contact .section-label { color: oklch(0.65 0.16 175); }
+    #contact .section-label { color: oklch(0.78 0.14 175); }
     #contact .section-title { color: #fff; }
-    #contact .section-sub { color: rgba(255,255,255,0.5); margin-bottom: 0; }
+    #contact .section-sub { color: rgba(235,242,250,0.78); margin-bottom: 0; }
     .contact-details { display: flex; flex-direction: column; gap: 20px; }
     .contact-row { display: flex; gap: 16px; align-items: center; }
     .contact-icon {
@@ -533,14 +757,14 @@
     }
     .contact-info {}
     .contact-type {
-      font-family: var(--font-mono); font-size: 0.62rem;
+      font-family: var(--font-mono); font-size: 0.64rem;
       letter-spacing: 0.12em; text-transform: uppercase;
-      color: rgba(255,255,255,0.3); margin-bottom: 2px;
+      color: rgba(200,220,240,0.6); margin-bottom: 2px;
     }
     .contact-val {
-      font-size: 0.92rem; font-weight: 300; color: rgba(255,255,255,0.75);
+      font-size: 0.95rem; font-weight: 400; color: rgba(245,250,255,0.92);
     }
-    .contact-val a { color: rgba(255,255,255,0.75); text-decoration: none; }
+    .contact-val a { color: rgba(245,250,255,0.92); text-decoration: none; }
     .contact-val a:hover { color: #fff; }
     .cv-download {
       margin-top: 32px;
@@ -561,14 +785,14 @@
       font-weight: 700; color: #fff; margin-bottom: 4px;
     }
     .affil-dept {
-      font-size: 0.85rem; font-weight: 300; color: rgba(255,255,255,0.4);
+      font-size: 0.88rem; font-weight: 400; color: rgba(230,238,248,0.72);
     }
 
     /* ── FOOTER ───────────────────────────────────── */
     footer {
-      background: #07111e; color: rgba(255,255,255,0.25);
+      background: #07111e; color: rgba(220,232,245,0.55);
       text-align: center; padding: 24px 80px;
-      font-size: 0.75rem; letter-spacing: 0.06em;
+      font-size: 0.78rem; letter-spacing: 0.08em;
       font-family: var(--font-mono);
     }
 
@@ -581,58 +805,15 @@
       .hero-right { display: none; }
       section { padding: 64px 32px; }
       .research-grid { grid-template-columns: 1fr; }
+      .process-explorer { grid-template-columns: 1fr; }
+      .process-intro { border-right: 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+      .process-panel { grid-template-columns: 1fr; }
       .study-layout { grid-template-columns: 1fr; }
       .study-layout.reverse { direction: ltr; }
       .skills-grid { grid-template-columns: 1fr 1fr; }
       .proto-grid { grid-template-columns: 1fr; }
       #contact { grid-template-columns: 1fr; }
     }
-
-    /* ── PRODUCTION POLISH PATCHES ───────────────────────────── */
-    #spray-canvas {
-      opacity: 0.72;
-      filter: saturate(0.9) contrast(0.95);
-    }
-
-    .hero-sticky::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 1;
-      background:
-        radial-gradient(circle at 68% 45%, rgba(79,195,247,0.08), transparent 34%),
-        linear-gradient(90deg, rgba(7,17,30,0.92) 0%, rgba(7,17,30,0.72) 42%, rgba(7,17,30,0.18) 100%),
-        linear-gradient(180deg, rgba(7,17,30,0.25) 0%, rgba(7,17,30,0.65) 100%);
-    }
-
-    .hero-left,
-    .hero-right,
-    .phase-label,
-    .scroll-hint {
-      z-index: 5;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      html { scroll-behavior: auto; }
-      *, *::before, *::after {
-        animation-duration: 0.001ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.001ms !important;
-      }
-      #spray-canvas { opacity: 0.35; }
-      .scroll-hint { display: none; }
-    }
-
-    @media (max-width: 768px) {
-      #hero { height: 135vh; }
-      .hero-name { font-size: clamp(2.6rem, 13vw, 4.2rem); }
-      .hero-bio { max-width: 100%; font-size: 0.92rem; }
-      #spray-canvas { opacity: 0.42; }
-      .phase-label { right: 20px; bottom: 84px; }
-      .scroll-hint { bottom: 20px; }
-    }
-
   </style>
 </head>
 <body>
@@ -655,17 +836,8 @@
 <!-- HERO -->
 <section id="hero">
 
-  <!-- sticky viewport that pins while user scrolls through the 200vh zone -->
+  <!-- static viewport frame (animation removed) -->
   <div class="hero-sticky">
-
-    <!-- full-bleed spray animation canvas -->
-    <canvas id="spray-canvas"></canvas>
-
-    <!-- scroll-driven phase label (bottom-right) -->
-    <div class="phase-label" id="phase-label">
-      <div class="pl-num">PHASE 01</div>
-      <div class="pl-text">Jet Formation</div>
-    </div>
 
     <!-- content overlay -->
     <div class="hero-overlay">
@@ -736,18 +908,6 @@
 
     </div><!-- /hero-overlay -->
 
-    <!-- scroll hint -->
-    <div class="scroll-hint">
-      <span>Scroll to explore</span>
-      <svg width="16" height="22" viewBox="0 0 16 22" fill="none">
-        <rect x="1" y="1" width="14" height="20" rx="7" stroke="white" stroke-width="1.5" stroke-opacity="0.4"/>
-        <circle cx="8" cy="6" r="2" fill="white" fill-opacity="0.5">
-          <animate attributeName="cy" values="6;14;6" dur="2s" repeatCount="indefinite"/>
-          <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2s" repeatCount="indefinite"/>
-        </circle>
-      </svg>
-    </div>
-
   </div><!-- /hero-sticky -->
 
 </section>
@@ -763,6 +923,35 @@
     and engineering design to understand and control the spray drying process — from
     the breakup of polymer solutions at the nozzle to the final dried particle.
   </p>
+
+  <!-- THREE-STAGE MONTAGE: atomization → evaporation → powder -->
+  <!-- Drag-and-drop your own GIF/image into each slot — it persists across reloads -->
+  <div class="pillar-montage">
+    <figure class="montage-fig">
+      <figcaption class="fig-cap-top">Stage I</figcaption>
+      <image-slot id="pillar-img-atomization"
+                  shape="rect"
+                  placeholder="Drop a nozzle spray GIF"
+                  class="montage-slot"></image-slot>
+      <figcaption class="fig-cap-bot">Atomization in nature — pressure nozzle spray</figcaption>
+    </figure>
+    <figure class="montage-fig">
+      <figcaption class="fig-cap-top">Stage II</figcaption>
+      <image-slot id="pillar-img-evaporation"
+                  shape="rect"
+                  placeholder="Drop a droplet evaporation GIF"
+                  class="montage-slot"></image-slot>
+      <figcaption class="fig-cap-bot">Evaporation — droplet shrinks, solute concentrates</figcaption>
+    </figure>
+    <figure class="montage-fig">
+      <figcaption class="fig-cap-top">Stage III</figcaption>
+      <image-slot id="pillar-img-powder"
+                  shape="rect"
+                  placeholder="Drop a dried-powder GIF"
+                  class="montage-slot"></image-slot>
+      <figcaption class="fig-cap-bot">Dried powder — particle collection</figcaption>
+    </figure>
+  </div>
 
   <div class="research-grid">
     <div class="research-card">
@@ -817,12 +1006,76 @@
     </div>
   </div>
 
-  <!-- Rheology animation canvas -->
-  <div style="margin-top:48px;">
-    <div class="section-label" style="margin-bottom:8px;">Rheology — Shear-thinning Behaviour</div>
-    <div class="fig-placeholder" style="min-height:280px;background:#0a1628;border-color:rgba(79,195,247,0.15);padding:0;overflow:hidden;"></div>
-    <div class="fig-caption" style="margin-top:8px;">Fig. Viscosity η vs. shear rate γ̇ for Xanthan gum solutions — animated from experimental data</div>
+  <div id="process-explorer" class="process-explorer" data-state="balanced">
+    <div class="process-intro">
+      <div class="process-kicker">Interactive Model</div>
+      <h3 class="process-title">Tune a Spray Drying Scenario</h3>
+      <p class="process-copy">
+        Adjust droplet size, air temperature, humidity, and feed concentration to
+        see how the drying window shifts. The estimates are intentionally compact,
+        but they make the process trade-offs visible at portfolio speed.
+      </p>
+      <div class="process-state" aria-live="polite">
+        <span class="state-dot"></span>
+        <span id="process-state-text">Balanced drying window</span>
+      </div>
+    </div>
+
+    <div class="process-panel">
+      <div class="process-controls" aria-label="Spray drying model inputs">
+        <label class="process-control" for="process-smd">
+          <span>Droplet SMD <strong data-process-value="smd">140 μm</strong></span>
+          <input id="process-smd" data-process-input="smd" type="range" min="40" max="420" step="5" value="140" />
+        </label>
+        <label class="process-control" for="process-temp">
+          <span>Air Temperature <strong data-process-value="temp">413 K</strong></span>
+          <input id="process-temp" data-process-input="temp" type="range" min="298" max="473" step="5" value="413" />
+        </label>
+        <label class="process-control" for="process-rh">
+          <span>Relative Humidity <strong data-process-value="rh">18%</strong></span>
+          <input id="process-rh" data-process-input="rh" type="range" min="1" max="50" step="1" value="18" />
+        </label>
+        <label class="process-control" for="process-solids">
+          <span>Feed Solids <strong data-process-value="solids">1.2 wt%</strong></span>
+          <input id="process-solids" data-process-input="solids" type="range" min="0.1" max="4.0" step="0.1" value="1.2" />
+        </label>
+        <p class="process-note">
+          Uses a simplified D²-law evaporation estimate with temperature, humidity,
+          and solids corrections. It is a visual design aid, not a replacement for
+          your full MATLAB model.
+        </p>
+      </div>
+
+      <div class="process-visual-panel">
+        <canvas id="process-canvas" role="img" aria-label="Animated spray drying chamber model"></canvas>
+        <div class="process-metrics" aria-live="polite">
+          <div class="process-metric">
+            <span>Evaporation Time</span>
+            <strong id="process-time">0 s</strong>
+          </div>
+          <div class="process-metric">
+            <span>Residence Path</span>
+            <strong id="process-path">0 m</strong>
+          </div>
+          <div class="process-metric">
+            <span>Dry Particle</span>
+            <strong id="process-particle">0 μm</strong>
+          </div>
+          <div class="process-metric">
+            <span>Drying Rate</span>
+            <strong id="process-rate">0×</strong>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
+
+  <!-- Rheology animation canvas -->
+  <figure class="research-figure" style="max-width:680px;margin:64px auto 0;">
+    <figcaption class="fig-cap-top">Fig 2. Shear-thinning Behaviour — Xanthan Gum Solutions</figcaption>
+    <div class="fig-placeholder" style="aspect-ratio:5/3;min-height:0;height:auto;background:#0a1628;border-color:rgba(79,195,247,0.15);padding:0;overflow:hidden;"></div>
+    <figcaption class="fig-cap-bot">Viscosity η vs. shear rate γ̇ — animated from experimental data</figcaption>
+  </figure>
 
 </section>
 
@@ -857,6 +1110,7 @@
         <li>Ligament-to-droplet fraction quantified as function of concentration and temperature</li>
         <li>High Ohnesorge number regime characterized — 2 international conference papers</li>
         <li>Effect of solution temperature (298–353 K) on spray characteristics documented</li>
+        <li>Two journal manuscripts in preparation (Exp. Thermal &amp; Fluid Sci.; JNNFM)</li>
       </ul>
       <div class="method-chips">
         <span class="method-chip">Shadowgraphy</span>
@@ -869,24 +1123,27 @@
     </div>
 
     <div class="study-visual">
-      <div class="fig-placeholder" style="min-height:280px;">
-        <div class="fig-label">[ SHADOWGRAPHY IMAGE ]<br>Ligament &amp; droplet spray field<br>— drop your experimental figure here —</div>
-      </div>
+      <figure class="research-figure">
+        <figcaption class="fig-cap-top">Fig 3. Shadowgraphy — Ligament &amp; Droplet Spray Field</figcaption>
+        <div class="fig-placeholder" style="aspect-ratio:4/3;min-height:0;">
+          <div class="fig-label">[ SHADOWGRAPHY ANIMATION ]<br>rotary spray ligament breakup</div>
+        </div>
+        <figcaption class="fig-cap-bot">Animated shadowgraphy-style view of rotary atomizer ligament breakup and droplet dispersion</figcaption>
+      </figure>
       <div class="mini-figs">
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <div class="fig-placeholder" style="min-height:140px;">
-            <div class="fig-label">[ SMD vs. Conc. ]<br>dropsize plot</div>
+        <figure class="research-figure">
+          <figcaption class="fig-cap-top">Fig 4. SMD vs. Concentration</figcaption>
+          <div class="fig-placeholder" style="aspect-ratio:4/3;min-height:0;">
+            <div class="fig-label">[ SMD plot ]</div>
           </div>
-          <div class="fig-caption">Fig 2. SMD vs. polymer concentration</div>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <div class="fig-placeholder" style="min-height:140px;">
-            <div class="fig-label">[ DSD Curve ]<br>droplet distribution</div>
+        </figure>
+        <figure class="research-figure">
+          <figcaption class="fig-cap-top">Fig 5. Droplet Size Distribution</figcaption>
+          <div class="fig-placeholder" style="aspect-ratio:4/3;min-height:0;">
+            <div class="fig-label">[ DSD curve ]</div>
           </div>
-          <div class="fig-caption">Fig 3. Droplet size distribution</div>
-        </div>
+        </figure>
       </div>
-      <div class="fig-caption" style="text-align:left;">Fig 1. Raw shadowgraphy image showing ligament breakup (placeholder — replace with your figure)</div>
     </div>
   </div>
 </section>
@@ -900,24 +1157,27 @@
 
   <div class="study-layout reverse">
     <div class="study-visual">
-      <div class="fig-placeholder" style="min-height:280px;">
-        <div class="fig-label">[ PENDANT DROPLET SEQUENCE ]<br>Backlit evaporation images<br>— replace with your image series —</div>
-      </div>
+      <figure class="research-figure">
+        <figcaption class="fig-cap-top">Fig 6. Pendant Droplet Evaporation Sequence</figcaption>
+        <div class="fig-placeholder" style="aspect-ratio:4/3;min-height:0;">
+          <div class="fig-label">[ BACKLIT IMAGE SERIES ]<br>— replace with your image series —</div>
+        </div>
+        <figcaption class="fig-cap-bot">Pendant droplet experimental setup with closed-loop control (placeholder)</figcaption>
+      </figure>
       <div class="mini-figs">
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <div class="fig-placeholder" style="min-height:140px;">
-            <div class="fig-label">[ D² vs. Time ]<br>evaporation law</div>
+        <figure class="research-figure">
+          <figcaption class="fig-cap-top">Fig 7. D²-law vs. Air Temperature</figcaption>
+          <div class="fig-placeholder" style="aspect-ratio:4/3;min-height:0;">
+            <div class="fig-label">[ D² vs. Time ]</div>
           </div>
-          <div class="fig-caption">Fig 5. D²-law plot vs. air temperature</div>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <div class="fig-placeholder" style="min-height:140px;">
-            <div class="fig-label">[ Exp. vs. Model ]<br>validation</div>
+        </figure>
+        <figure class="research-figure">
+          <figcaption class="fig-cap-top">Fig 8. Experiment vs. Numerical Model</figcaption>
+          <div class="fig-placeholder" style="aspect-ratio:4/3;min-height:0;">
+            <div class="fig-label">[ validation ]</div>
           </div>
-          <div class="fig-caption">Fig 6. Experiment vs. numerical model</div>
-        </div>
+        </figure>
       </div>
-      <div class="fig-caption" style="text-align:left;">Fig 4. Pendant droplet experimental setup with Arduino-controlled environment (placeholder)</div>
     </div>
 
     <div class="study-content">
@@ -945,7 +1205,7 @@
         <li>Sensitivity analysis on air temperature, humidity, and droplet size</li>
         <li>Model validated against experimental pendant droplet data</li>
         <li>Results directly fed into spray dryer residence time design</li>
-        
+        <li>Journal manuscript in preparation (Int. J. Heat &amp; Mass Transfer)</li>
       </ul>
       <div class="method-chips">
         <span class="method-chip">Backlit Imaging</span>
@@ -1002,7 +1262,7 @@
     </div>
 
     <div class="proto-visual">
-      <div class="fig-label">[ SPRAY DRYER CAD / PROTOTYPE IMAGE ]<br>Replace with SolidWorks render or prototype photo</div>
+      <div class="fig-label">[ SPRAY DRYER CROSS-SECTION ANIMATION ]<br>atomization, hot-air swirl, drying, and powder outlet</div>
     </div>
   </div>
 </section>
@@ -1129,7 +1389,36 @@
     </div>
   </div>
 
- 
+  <div class="pub-section-label">Journal Articles — In Preparation</div>
+  <div class="pub-list">
+    <div class="pub-item">
+      <div class="pub-num">J1</div>
+      <div class="pub-body">
+        <div class="pub-title">"Atomization of viscoelastic liquid jets using a rotary atomizer"</div>
+        <div class="pub-authors">Amitesh K. Chaudhary, R.V. Ravikrishna</div>
+        <div class="pub-venue">Experimental Thermal and Fluid Science (to be submitted)</div>
+      </div>
+      <div class="pub-badge badge-sub">In Prep.</div>
+    </div>
+    <div class="pub-item">
+      <div class="pub-num">J2</div>
+      <div class="pub-body">
+        <div class="pub-title">"Effect of temperature on the rheology and spray characteristics of polymer solutions"</div>
+        <div class="pub-authors">Amitesh K. Chaudhary, R.V. Ravikrishna</div>
+        <div class="pub-venue">Journal of Non-Newtonian Fluid Mechanics (to be submitted)</div>
+      </div>
+      <div class="pub-badge badge-sub">In Prep.</div>
+    </div>
+    <div class="pub-item">
+      <div class="pub-num">J3</div>
+      <div class="pub-body">
+        <div class="pub-title">"Experimental and numerical investigation on the effect of air temperature and humidity on single droplet evaporation"</div>
+        <div class="pub-authors">Amitesh K. Chaudhary, R.V. Ravikrishna</div>
+        <div class="pub-venue">International Journal of Heat and Mass Transfer (to be submitted)</div>
+      </div>
+      <div class="pub-badge badge-sub">In Prep.</div>
+    </div>
+  </div>
 </section>
 
 <hr class="rule" />
@@ -1146,12 +1435,26 @@
     <div class="contact-affil">
       <div class="affil-name">Indian Institute of Science</div>
       <div class="affil-dept">Department of Mechanical Engineering, Bengaluru 560012, India</div>
-      <div class="affil-dept" style="margin-top:6px;">Currently: Research Associate — Combustion &amp; Spray Lab</div>
+      <div class="affil-dept" style="margin-top:6px;">Currently: Research Associate — Gas Turbine Combustion &amp; Spray Lab</div>
     </div>
   </div>
 
   <div>
     <div class="contact-details">
+      <div class="contact-row">
+        <div class="contact-icon">✉</div>
+        <div class="contact-info">
+          <div class="contact-type">Institutional Email</div>
+          <div class="contact-val"><a href="mailto:amiteshc@iisc.ac.in">amiteshc@iisc.ac.in</a></div>
+        </div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-icon">✉</div>
+        <div class="contact-info">
+          <div class="contact-type">Personal Email</div>
+          <div class="contact-val"><a href="mailto:amiteshch93@gmail.com">amiteshch93@gmail.com</a></div>
+        </div>
+      </div>
       <div class="contact-row">
         <div class="contact-icon">in</div>
         <div class="contact-info">
@@ -1159,6 +1462,12 @@
           <div class="contact-val"><a href="https://www.linkedin.com/in/amitesh-kch" target="_blank">linkedin.com/in/amitesh-kch</a></div>
         </div>
       </div>
+      <div class="contact-row">
+        <div class="contact-icon">☎</div>
+        <div class="contact-info">
+          <div class="contact-type">Mobile</div>
+          <div class="contact-val">+91 97529 05016</div>
+        </div>
       </div>
     </div>
 
@@ -1172,60 +1481,68 @@
   Amitesh K. Chaudhary · PhD, IISc Bengaluru · Spray Drying &amp; Multiphase Flow Research · 2025
 </footer>
 
-<!-- SPRAY ANIMATION (Three.js WebGL) -->
-<script src="spray-animation.js"></script>
+<!-- (Hero animations removed) -->
+
+<!-- DRAG-AND-DROP IMAGE SLOTS (web component) -->
+<script src="image-slot.js"></script>
 
 <!-- GSAP SCROLL ANIMATIONS + LENIS SMOOTH SCROLL -->
 <script src="scroll-animations.js"></script>
 
+<!-- INTERACTIVE SPRAY DRYING PROCESS EXPLORER -->
+<script src="process-explorer.js"></script>
+
 <!-- SECTION-SPECIFIC CANVAS ANIMATIONS -->
 <script src="section-animations.js"></script>
 
-<!-- PHASE LABEL UPDATER -->
-<script>
-(function () {
-  const phases = [
-    { threshold: 0.00, num: 'PHASE 01', text: 'Jet Formation' },
-    { threshold: 0.22, num: 'PHASE 02', text: 'Rayleigh Instability' },
-    { threshold: 0.42, num: 'PHASE 03', text: 'Ligament Breakup' },
-    { threshold: 0.65, num: 'PHASE 04', text: 'Droplet Dispersion' },
-    { threshold: 0.85, num: 'PHASE 05', text: 'Evaporation' },
-  ];
-  const label    = document.getElementById('phase-label');
-  const numEl    = label && label.querySelector('.pl-num');
-  const textEl   = label && label.querySelector('.pl-text');
-  let   current  = 0;
+<!-- PHASE LABEL UPDATER (removed — hero is static; phase label no longer rendered) -->
 
-  function onScroll() {
-    if (!label) return;
-    const hero      = document.getElementById('hero');
-    const total = hero ? Math.max(1, hero.offsetHeight - window.innerHeight) : window.innerHeight;
-    const rect = hero ? hero.getBoundingClientRect() : { top: -window.scrollY };
-    const progress  = Math.min(1, Math.max(0, -rect.top / total));
+<!-- TWEAKS PANEL -->
+<script type="text/babel">
 
-    // hide once past hero
-    label.style.opacity = progress > 0.96 ? '0' : '1';
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "oklch(0.62 0.18 220)",
+  "tealColor": "oklch(0.65 0.16 175)",
+  "heroFont": "Barlow Condensed",
+  "darkMode": false,
+  "showBars": true
+}/*EDITMODE-END*/;
 
-    // pick correct phase
-    let idx = 0;
-    for (let i = phases.length - 1; i >= 0; i--) {
-      if (progress >= phases[i].threshold) { idx = i; break; }
-    }
-    if (idx !== current) {
-      current = idx;
-      label.style.opacity = '0';
-      setTimeout(() => {
-        if (numEl)  numEl.textContent  = phases[idx].num;
-        if (textEl) textEl.textContent = phases[idx].text;
-        label.style.opacity = progress > 0.96 ? '0' : '1';
-      }, 200);
-    }
-  }
+function TweaksApp() {
+  const result = useTweaks(TWEAK_DEFAULTS);
+  const tweaks = result?.tweaks ?? TWEAK_DEFAULTS;
+  const setTweak = result?.setTweak ?? (() => {});
 
-  label && (label.style.transition = 'opacity 0.4s');
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
-})();
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--accent', tweaks.accentColor);
+    document.documentElement.style.setProperty('--accent-teal', tweaks.tealColor);
+  }, [tweaks.accentColor, tweaks.tealColor]);
+
+  React.useEffect(() => {
+    document.querySelectorAll('.bar-fill').forEach(el => {
+      el.style.display = tweaks.showBars ? '' : 'none';
+    });
+    document.querySelectorAll('.bar-wrap').forEach(el => {
+      el.style.display = tweaks.showBars ? '' : 'none';
+    });
+  }, [tweaks.showBars]);
+
+  return (
+    <TweaksPanel title="Tweaks">
+      <TweakSection label="Colors">
+        <TweakColor label="Accent (Blue)" value={tweaks.accentColor} onChange={v => setTweak('accentColor', v)} />
+        <TweakColor label="Accent (Teal)" value={tweaks.tealColor} onChange={v => setTweak('tealColor', v)} />
+      </TweakSection>
+      <TweakSection label="Skills Section">
+        <TweakToggle label="Show skill bars" value={tweaks.showBars} onChange={v => setTweak('showBars', v)} />
+      </TweakSection>
+    </TweaksPanel>
+  );
+}
+
+const tweaksRoot = document.createElement('div');
+document.body.appendChild(tweaksRoot);
+ReactDOM.createRoot(tweaksRoot).render(<TweaksApp />);
 </script>
 
 </body>

@@ -1,86 +1,109 @@
 /* ═══════════════════════════════════════════════════════════════
-   SECTION CANVAS ANIMATIONS
-   Each research section gets its own WebGL mini-canvas:
-   • Research Overview  → rotating rheology viscosity curves
-   • Atomization        → laser sheet + spray shadowgraphy sim
-   • Evaporation        → D²-law droplet shrinking + temperature field
-   • Prototype          → wireframe CAD schematic
+   SECTION CANVAS ANIMATIONS — perf-tuned
+   • Each draw() does NOT touch canvas.width/height (no reflow)
+   • Canvas sized only on init + window resize (ResizeObserver)
+   • IntersectionObserver pauses RAF when off-screen (saves CPU)
+   • DPR capped at 1.5 so retina laptops don't render 4× pixels
    ═══════════════════════════════════════════════════════════════ */
 
 (function () {
   'use strict';
-
-  /* ── wait for GSAP + ScrollTrigger ── */
   if (!window.gsap || !window.ScrollTrigger) return;
   gsap.registerPlugin(ScrollTrigger);
 
-  /* ══════════════════════════════════════════════════════════════
-     HELPER: create a canvas overlay inside a section figure
-  ══════════════════════════════════════════════════════════════ */
-  function makeCanvas(parentSelector, id) {
-    const parent = document.querySelector(parentSelector);
-    if (!parent) return null;
+  const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+
+  /* shared helper — installs a canvas inside `host` and returns
+     { ctx, getSize, onResize } so the draw loop never touches DOM */
+  function makeCanvas(host) {
+    if (!host) return null;
+    host.innerHTML = '';
+    host.style.position = host.style.position || 'relative';
     const c = document.createElement('canvas');
-    c.id = id;
-    c.style.cssText = 'width:100%;height:100%;display:block;position:absolute;inset:0;';
-    parent.style.position = 'relative';
-    parent.appendChild(c);
-    return c;
+    c.style.cssText = 'width:100%;height:100%;display:block;';
+    host.appendChild(c);
+    const ctx = c.getContext('2d', { alpha: false });
+    let w = 0, h = 0;
+    function sync() {
+      const nw = host.clientWidth;
+      const nh = host.clientHeight;
+      if (nw === w && nh === h) return false;
+      w = nw; h = nh;
+      c.width  = Math.max(1, Math.round(w * DPR));
+      c.height = Math.max(1, Math.round(h * DPR));
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      return true;
+    }
+    sync();
+    /* ResizeObserver is fired only on actual size changes — cheap. */
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(sync);
+      ro.observe(host);
+    } else {
+      window.addEventListener('resize', sync);
+    }
+    return {
+      ctx,
+      getSize: () => ({ w, h }),
+    };
   }
 
-  /* ── DPR-aware resize ── */
-  function fitCanvas(c) {
-    const dpr = window.devicePixelRatio || 1;
-    c.width  = c.offsetWidth  * dpr;
-    c.height = c.offsetHeight * dpr;
-    const ctx = c.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return ctx;
+  /* shared visibility gate — RAF only runs while host is in viewport */
+  function withVisibility(host, frameFn) {
+    let raf = null, visible = false;
+    function tick() {
+      raf = null;
+      if (!visible) return;
+      frameFn();
+      raf = requestAnimationFrame(tick);
+    }
+    function start() {
+      if (raf || !visible) return;
+      raf = requestAnimationFrame(tick);
+    }
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(e => {
+          visible = e.isIntersecting;
+          if (visible) start();
+        });
+      }, { rootMargin: '120px 0px' });
+      io.observe(host);
+    } else {
+      visible = true; start();
+    }
+    return { start, isVisible: () => visible };
   }
-
-  /* ── easing ── */
-  const easeInOut = t => t < .5 ? 2*t*t : -1+(4-2*t)*t;
-  const lerp      = (a, b, t) => a + (b - a) * t;
 
   /* ══════════════════════════════════════════════════════════════
-     1. RESEARCH OVERVIEW — Rheology viscosity curve animation
-        Shear-thinning (power-law) curves for different conc.
+     1. RHEOLOGY — viscosity vs shear rate (log-log)
   ══════════════════════════════════════════════════════════════ */
-  (function initRheologyCurve() {
-    // Inject a canvas into the first .fig-placeholder in #research
-    const ph = document.querySelector('#research .fig-placeholder');
-    if (!ph) return;
+  (function rheology() {
+    const host = document.querySelector('#research .fig-placeholder');
+    if (!host) return;
+    const stage = makeCanvas(host); if (!stage) return;
+    const { ctx, getSize } = stage;
 
-    // replace the placeholder text with a canvas
-    ph.innerHTML = '';
-    const c   = document.createElement('canvas');
-    c.style.cssText = 'width:100%;height:100%;display:block;';
-    ph.appendChild(c);
-
-    let raf, visible = false, phase = 0;
+    const concs = [
+      { c: 0.1, n: 0.92, K: 0.04, col: '#4fc3f7' },
+      { c: 0.5, n: 0.78, K: 0.18, col: '#26c6da' },
+      { c: 1.0, n: 0.65, K: 0.55, col: '#00bcd4' },
+      { c: 2.0, n: 0.52, K: 1.80, col: '#0097a7' },
+      { c: 4.0, n: 0.38, K: 6.50, col: '#006064' },
+    ];
+    const gammaMin = 0.1, gammaMax = 1000, etaMin = 0.001, etaMax = 100;
+    let phase = 0;
+    const PAD = { l: 52, r: 60, t: 18, b: 38 };
 
     function draw() {
-      const dpr = window.devicePixelRatio || 1;
-      const W = c.offsetWidth, H = c.offsetHeight;
+      const { w: W, h: H } = getSize();
       if (!W || !H) return;
-      c.width = W * dpr; c.height = H * dpr;
-      const ctx = c.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#0a1628'; ctx.fillRect(0, 0, W, H);
 
-      ctx.clearRect(0, 0, W, H);
+      const CW = W - PAD.l - PAD.r;
+      const CH = H - PAD.t - PAD.b;
 
-      // background
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, '#0a1628'); bg.addColorStop(1, '#071018');
-      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-
-      const PAD  = { l: 52, r: 20, t: 20, b: 48 };
-      const CW   = W - PAD.l - PAD.r;
-      const CH   = H - PAD.t - PAD.b;
-
-      // Grid
-      ctx.strokeStyle = 'rgba(79,195,247,0.08)';
-      ctx.lineWidth   = 1;
+      ctx.strokeStyle = 'rgba(79,195,247,0.08)'; ctx.lineWidth = 1;
       for (let i = 0; i <= 5; i++) {
         const x = PAD.l + i * CW / 5;
         ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + CH); ctx.stroke();
@@ -88,235 +111,285 @@
         ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l + CW, y); ctx.stroke();
       }
 
-      // Axis labels
-      ctx.fillStyle = 'rgba(179,229,252,0.45)';
-      ctx.font      = `${Math.max(9, W*0.028)}px DM Mono, monospace`;
-      ctx.fillText('Shear Rate γ̇ (s⁻¹) →', PAD.l, H - 8);
-      ctx.save(); ctx.translate(14, PAD.t + CH/2); ctx.rotate(-Math.PI/2);
-      ctx.fillText('Viscosity η (Pa·s)', 0, 0); ctx.restore();
+      ctx.fillStyle = 'rgba(179,229,252,0.55)';
+      ctx.font = '10px DM Mono, monospace';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('Shear rate γ̇ (s⁻¹) →', PAD.l, H - 12);
+      ctx.save();
+      ctx.translate(14, PAD.t + CH / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('Viscosity η (Pa·s)', 0, 0);
+      ctx.restore();
 
-      // Concentrations: 0.1, 0.5, 1.0, 2.0, 4.0 wt%
-      const concs = [
-        { c: 0.1, n: 0.92, K: 0.04, col: '#4fc3f7' },
-        { c: 0.5, n: 0.78, K: 0.18, col: '#26c6da' },
-        { c: 1.0, n: 0.65, K: 0.55, col: '#00bcd4' },
-        { c: 2.0, n: 0.52, K: 1.80, col: '#0097a7' },
-        { c: 4.0, n: 0.38, K: 6.50, col: '#006064' },
-      ];
-
-      const gammaMin = 0.1, gammaMax = 1000;
-      const etaMin   = 0.001, etaMax = 100;
-
-      function toX(gamma) { return PAD.l + CW * (Math.log10(gamma) - Math.log10(gammaMin)) / (Math.log10(gammaMax) - Math.log10(gammaMin)); }
-      function toY(eta)   { return PAD.t + CH * (1 - (Math.log10(eta) - Math.log10(etaMin)) / (Math.log10(etaMax) - Math.log10(etaMin))); }
+      function toX(g) { return PAD.l + CW * (Math.log10(g) - Math.log10(gammaMin)) / (Math.log10(gammaMax) - Math.log10(gammaMin)); }
+      function toY(e) { return PAD.t + CH * (1 - (Math.log10(e) - Math.log10(etaMin)) / (Math.log10(etaMax) - Math.log10(etaMin))); }
 
       const drawFrac = Math.min(1, phase);
+      const nPts = 60;
       concs.forEach((cr, ci) => {
-        const nPts = 80;
         ctx.beginPath();
-        for (let i = 0; i <= Math.floor(nPts * drawFrac); i++) {
+        const last = Math.floor(nPts * drawFrac);
+        for (let i = 0; i <= last; i++) {
           const gamma = Math.pow(10, Math.log10(gammaMin) + i / nPts * (Math.log10(gammaMax) - Math.log10(gammaMin)));
-          const eta   = cr.K * Math.pow(gamma, cr.n - 1);
+          const eta = cr.K * Math.pow(gamma, cr.n - 1);
           const x = toX(gamma), y = toY(eta);
           i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
         ctx.strokeStyle = cr.col;
-        ctx.lineWidth   = 2;
-        ctx.shadowBlur  = 8; ctx.shadowColor = cr.col;
+        ctx.lineWidth = 1.6;
         ctx.stroke();
-        ctx.shadowBlur  = 0;
 
-        // Legend
-        if (drawFrac > (ci + 1) / concs.length * 0.8) {
+        if (drawFrac > (ci + 1) / concs.length * 0.85) {
           ctx.fillStyle = cr.col;
-          ctx.fillText(`${cr.c} wt%`, W - 56, PAD.t + 16 + ci * 18);
+          ctx.fillText(cr.c + ' wt%', PAD.l + CW + 6, PAD.t + 12 + ci * 14);
         }
       });
 
-      // Axes
-      ctx.strokeStyle = 'rgba(79,195,247,0.4)';
-      ctx.lineWidth   = 1.5;
+      ctx.strokeStyle = 'rgba(79,195,247,0.4)'; ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(PAD.l, PAD.t); ctx.lineTo(PAD.l, PAD.t + CH); ctx.lineTo(PAD.l + CW, PAD.t + CH);
       ctx.stroke();
 
-      // Caption
-      ctx.fillStyle = 'rgba(179,229,252,0.5)';
-      ctx.font = `${Math.max(8, W*0.024)}px DM Mono, monospace`;
-      ctx.fillText('Shear-thinning (power-law) — Xanthan gum solutions', PAD.l + 4, PAD.t - 6);
+      ctx.fillStyle = 'rgba(179,229,252,0.55)';
+      ctx.fillText('Shear-thinning (power-law) — Xanthan gum', PAD.l + 4, PAD.t - 4);
 
-      if (visible) phase = Math.min(1, phase + 0.008);
-      raf = requestAnimationFrame(draw);
+      if (phase < 1) phase = Math.min(1, phase + 0.008);
     }
 
-    ScrollTrigger.create({
-      trigger: ph,
-      start: 'top 88%',
-      onEnter:    () => { visible = true;  if (!raf) draw(); },
-      onLeaveBack:() => { visible = false; },
-    });
-    draw();
+    withVisibility(host, draw);
   })();
 
   /* ══════════════════════════════════════════════════════════════
-     2. ATOMIZATION — Laser sheet shadowgraphy simulation
-        Shows: illuminated spray cone + ligament/droplet shadows
+     2. SHADOWGRAPHY — backlit spray field
   ══════════════════════════════════════════════════════════════ */
-  (function initShadowgraphy() {
-    const phs = document.querySelectorAll('#atomization .fig-placeholder');
-    const ph  = phs[0]; if (!ph) return;
-    ph.innerHTML = '';
-    const c = document.createElement('canvas');
-    c.style.cssText = 'width:100%;height:100%;display:block;';
-    ph.appendChild(c);
+  (function shadowgraphy() {
+    const host = document.querySelector('#atomization .fig-placeholder');
+    if (!host) return;
+    const stage = makeCanvas(host); if (!stage) return;
+    const { ctx, getSize } = stage;
 
-    /* seeded random spray particles */
-    class SprayParticle {
-      constructor(seed) {
-        this.reset(seed);
-      }
-      reset(seed) {
-        const angle = (Math.random() - 0.5) * 55 * Math.PI / 180;
-        this.speed  = 0.3 + Math.random() * 1.2;
-        this.vx     = Math.sin(angle) * this.speed;
-        this.vy     = Math.cos(angle) * this.speed;
-        this.x      = 0.5 + (Math.random() - 0.5) * 0.04;
-        this.y      = 0.18;
-        this.r      = seed < 0.15 ? 0.016 + Math.random() * 0.012  // large
-                    : seed < 0.45 ? 0.007 + Math.random() * 0.007  // medium
-                    : 0.002 + Math.random() * 0.004;                 // small
-        this.type   = seed < 0.15 ? 'large' : seed < 0.45 ? 'medium' : 'small';
-        this.alpha  = 0;
-        this.life   = 0;
-        this.maxL   = 60 + Math.random() * 80;
-        this.isLig  = Math.random() < 0.12;
-        this.ligLen = 0.04 + Math.random() * 0.1;
-        this.ligAng = angle + (Math.random() - 0.5) * 0.4;
-      }
-      update(W, H) {
-        this.life++;
-        this.x += this.vx * 0.006;
-        this.y += this.vy * 0.006;
-        this.vy += 0.008; // gravity
-        this.alpha = Math.min(1, this.life / 10) * Math.max(0, 1 - (this.life - this.maxL + 20) / 20);
-        if (this.life >= this.maxL) this.reset(Math.random());
-      }
-      draw(ctx, W, H) {
-        const px = this.x * W, py = this.y * H;
-        const rx = this.r * W;
-        if (this.isLig) {
-          ctx.beginPath();
-          ctx.moveTo(px, py);
-          ctx.lineTo(px + Math.cos(this.ligAng)*this.ligLen*W, py + Math.sin(this.ligAng)*this.ligLen*H);
-          ctx.strokeStyle = `rgba(10,30,50,${this.alpha * 0.85})`;
-          ctx.lineWidth = rx * 1.2;
-          ctx.stroke();
-        } else {
-          ctx.beginPath(); ctx.arc(px, py, Math.max(1, rx), 0, Math.PI*2);
-          ctx.fillStyle = `rgba(5,20,40,${this.alpha * (this.type === 'large' ? 0.9 : 0.75)})`;
-          ctx.fill();
-        }
-      }
+    const N = 112;
+    const P = [];
+    const dust = Array.from({ length: 90 }, () => ({
+      x: Math.random(), y: Math.random(), r: 0.35 + Math.random() * 1.1,
+      a: 0.04 + Math.random() * 0.08,
+    }));
+    const scan = Array.from({ length: 24 }, () => ({
+      y: Math.random(), a: 0.012 + Math.random() * 0.02,
+    }));
+
+    function reset(p, warmStart) {
+      const angle = (Math.random() - 0.5) * 74 * Math.PI / 180;
+      const speed = 0.55 + Math.random() * 1.85;
+      const kindSeed = Math.random();
+      p.x = 0.5 + (Math.random() - 0.5) * 0.05;
+      p.y = 0.145 + (warmStart ? Math.random() * 0.82 : 0);
+      p.vx = Math.sin(angle) * speed;
+      p.vy = Math.cos(angle) * speed * (0.86 + Math.random() * 0.28);
+      p.life = warmStart ? Math.random() * 120 : 0;
+      p.maxL = 95 + Math.random() * 135;
+      p.r = kindSeed < 0.10 ? 0.018 + Math.random() * 0.018
+        : kindSeed < 0.42 ? 0.007 + Math.random() * 0.010
+          : 0.0018 + Math.random() * 0.0045;
+      p.lig = kindSeed > 0.73;
+      p.tail = 0.035 + Math.random() * 0.12;
+      p.spin = angle + (Math.random() - 0.5) * 0.75;
+      p.wobble = Math.random() * Math.PI * 2;
+    }
+    for (let i = 0; i < N; i++) { const p = {}; reset(p, true); P.push(p); }
+
+    let t = 0;
+
+    function drawDrop(px, py, r, alpha, wobble) {
+      const stretch = 1 + Math.sin(wobble) * 0.14;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.scale(stretch, 1 / stretch);
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(6,18,34,' + (alpha * 0.76) + ')';
+      ctx.fill();
+      ctx.lineWidth = Math.max(0.7, r * 0.18);
+      ctx.strokeStyle = 'rgba(245,252,255,' + (alpha * 0.34) + ')';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-r * 0.25, -r * 0.28, Math.max(0.6, r * 0.22), 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,' + (alpha * 0.18) + ')';
+      ctx.fill();
+      ctx.restore();
     }
 
-    const particles = Array.from({ length: 120 }, (_, i) => new SprayParticle(i / 120));
-    let raf2, vis2 = false;
-
-    function draw2() {
-      const dpr = window.devicePixelRatio || 1;
-      const W = c.offsetWidth, H = c.offsetHeight;
+    function draw() {
+      const { w: W, h: H } = getSize();
       if (!W || !H) return;
-      c.width = W*dpr; c.height = H*dpr;
-      const ctx = c.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      t++;
 
-      // Backlit background (bright diffuse illumination)
-      const bg = ctx.createRadialGradient(W/2, H*0.5, 0, W/2, H*0.5, W*0.7);
-      bg.addColorStop(0, '#d8eaf5'); bg.addColorStop(0.6, '#b8d4e8'); bg.addColorStop(1, '#8ab0c8');
-      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      const flicker = 1 + Math.sin(t * 0.08) * 0.015 + Math.sin(t * 0.017) * 0.018;
+      const bg = ctx.createRadialGradient(W * 0.52, H * 0.45, 0, W * 0.52, H * 0.45, W * 0.78);
+      bg.addColorStop(0, 'rgb(' + Math.round(232 * flicker) + ',' + Math.round(244 * flicker) + ',250)');
+      bg.addColorStop(0.58, '#c9dceb');
+      bg.addColorStop(1, '#7d9ab2');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
 
-      // Laser sheet glow (vertical strip)
-      const sheet = ctx.createLinearGradient(W*0.35, 0, W*0.65, 0);
-      sheet.addColorStop(0, 'rgba(100,200,100,0)');
-      sheet.addColorStop(0.45, 'rgba(100,220,80,0.12)');
-      sheet.addColorStop(0.55, 'rgba(100,220,80,0.12)');
-      sheet.addColorStop(1, 'rgba(100,200,100,0)');
-      ctx.fillStyle = sheet; ctx.fillRect(0, 0, W, H);
+      const vignette = ctx.createRadialGradient(W / 2, H / 2, W * 0.12, W / 2, H / 2, W * 0.72);
+      vignette.addColorStop(0, 'rgba(255,255,255,0)');
+      vignette.addColorStop(1, 'rgba(8,20,36,0.30)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, W, H);
 
-      // Rotary disk (simplified top-down view)
+      ctx.fillStyle = 'rgba(255,255,255,0.045)';
+      for (let i = 0; i < scan.length; i++) {
+        const y = ((scan[i].y + t * 0.0008) % 1) * H;
+        ctx.globalAlpha = scan[i].a;
+        ctx.fillRect(0, y, W, 1);
+      }
+      ctx.globalAlpha = 1;
+
+      dust.forEach((d, i) => {
+        ctx.beginPath();
+        ctx.arc(d.x * W, ((d.y + t * 0.00012 * (i % 3)) % 1) * H, d.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(8,20,35,' + d.a + ')';
+        ctx.fill();
+      });
+
+      const cx = W / 2;
+      const diskY = H * 0.105;
+      const diskR = Math.min(W, H) * 0.082;
+      const rot = t * 0.18;
+
       ctx.save();
-      ctx.translate(W/2, H*0.12);
-      ctx.beginPath(); ctx.arc(0, 0, W*0.045, 0, Math.PI*2);
-      ctx.fillStyle = '#2a4a6a'; ctx.fill();
-      ctx.strokeStyle = '#4a7a9a'; ctx.lineWidth = 1.5; ctx.stroke();
-      // Rotation indicator
-      const rot = Date.now() * 0.003;
+      ctx.translate(cx, diskY);
+      const hubGrad = ctx.createRadialGradient(-diskR * 0.22, -diskR * 0.22, 0, 0, 0, diskR);
+      hubGrad.addColorStop(0, '#5c7f9b');
+      hubGrad.addColorStop(0.6, '#223a57');
+      hubGrad.addColorStop(1, '#071321');
+      ctx.fillStyle = hubGrad;
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(Math.cos(rot)*W*0.04, Math.sin(rot)*W*0.04);
-      ctx.strokeStyle = '#78b8d8'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.arc(0, 0, diskR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(5,18,32,0.34)';
+      ctx.lineWidth = Math.max(2, diskR * 0.11);
+      for (let b = 0; b < 8; b++) {
+        const a = rot + b * Math.PI / 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * diskR * 0.2, Math.sin(a) * diskR * 0.2);
+        ctx.lineTo(Math.cos(a) * diskR * 0.9, Math.sin(a) * diskR * 0.9);
+        ctx.stroke();
+      }
       ctx.restore();
 
-      // Update and draw spray particles (dark silhouettes on bright bg = shadowgraphy)
-      particles.forEach(p => { p.update(W, H); p.draw(ctx, W, H); });
+      const sheet = ctx.createRadialGradient(cx, diskY + diskR * 0.5, 0, cx, diskY + H * 0.42, W * 0.34);
+      sheet.addColorStop(0, 'rgba(6,20,34,0.18)');
+      sheet.addColorStop(0.34, 'rgba(6,20,34,0.055)');
+      sheet.addColorStop(1, 'rgba(6,20,34,0)');
+      ctx.fillStyle = sheet;
+      ctx.beginPath();
+      ctx.moveTo(cx, diskY + diskR * 0.54);
+      ctx.lineTo(cx - W * 0.31, H * 0.9);
+      ctx.lineTo(cx + W * 0.31, H * 0.9);
+      ctx.closePath();
+      ctx.fill();
 
-      // Scale bar
-      ctx.strokeStyle = 'rgba(10,30,50,0.6)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(W-80, H-18); ctx.lineTo(W-20, H-18); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(W-80, H-22); ctx.lineTo(W-80, H-14); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(W-20, H-22); ctx.lineTo(W-20, H-14); ctx.stroke();
-      ctx.fillStyle = 'rgba(10,30,50,0.7)';
-      ctx.font = `${Math.max(8, W*0.025)}px DM Mono, monospace`;
-      ctx.fillText('500 μm', W-78, H-5);
+      for (let i = 0; i < N; i++) {
+        const p = P[i];
+        p.life++;
+        p.x += p.vx * 0.0042;
+        p.y += p.vy * 0.0048;
+        p.vy += 0.0027 + Math.min(0.012, p.r * 0.25);
+        p.vx *= 0.996;
+        p.alpha = Math.min(1, p.life / 12) * Math.max(0, 1 - (p.life - p.maxL + 24) / 24);
+        if (p.life >= p.maxL || p.y > 1.04 || p.x < -0.08 || p.x > 1.08) reset(p, false);
 
-      // Caption
-      ctx.fillStyle = 'rgba(10,30,50,0.55)';
-      ctx.fillText('Shadowgraphy — rotary atomizer spray field', 8, H-5);
+        const px = p.x * W + Math.sin(t * 0.035 + p.wobble) * W * 0.004;
+        const py = p.y * H;
+        const r = Math.max(0.9, p.r * W * (1 + p.y * 0.12));
 
-      if (vis2) raf2 = requestAnimationFrame(draw2);
+        if (p.lig) {
+          const len = p.tail * W * (0.55 + p.y * 0.8);
+          const a = Math.atan2(p.vy, p.vx) + Math.PI / 2 + Math.sin(t * 0.03 + p.wobble) * 0.16;
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(a);
+          const grad = ctx.createLinearGradient(0, -len * 0.5, 0, len * 0.5);
+          grad.addColorStop(0, 'rgba(6,18,34,0)');
+          grad.addColorStop(0.5, 'rgba(6,18,34,' + (p.alpha * 0.72) + ')');
+          grad.addColorStop(1, 'rgba(6,18,34,0)');
+          ctx.strokeStyle = grad;
+          ctx.lineCap = 'round';
+          ctx.lineWidth = Math.max(1.1, r * 0.55);
+          ctx.beginPath();
+          ctx.moveTo(0, -len * 0.5);
+          ctx.quadraticCurveTo(Math.sin(t * 0.04 + p.wobble) * r * 1.6, 0, 0, len * 0.5);
+          ctx.stroke();
+          drawDrop(0, -len * 0.48, r * 0.72, p.alpha * 0.75, p.wobble);
+          drawDrop(0, len * 0.48, r * 0.92, p.alpha * 0.65, p.wobble + 2);
+          ctx.restore();
+        } else {
+          drawDrop(px, py, r, p.alpha, t * 0.08 + p.wobble);
+        }
+      }
+
+      ctx.fillStyle = 'rgba(5,16,30,0.26)';
+      ctx.fillRect(0, 0, W, 18);
+      ctx.fillStyle = 'rgba(235,248,255,0.64)';
+      ctx.font = '9px DM Mono,monospace';
+      ctx.fillText('CAM 02  |  12,000 fps  |  rotary atomizer', 8, 12);
+      ctx.fillText('frame ' + String(4200 + t).padStart(5, '0'), W - 106, 12);
+
+      ctx.strokeStyle = 'rgba(5,18,32,0.72)';
+      ctx.lineWidth = 1.4;
+      const sx = W - 86, sy = H - 18;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + 62, sy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx, sy - 5); ctx.lineTo(sx, sy + 5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx + 62, sy - 5); ctx.lineTo(sx + 62, sy + 5); ctx.stroke();
+      ctx.fillStyle = 'rgba(5,18,32,0.76)';
+      ctx.fillText('500 μm', sx + 16, H - 4);
+      ctx.fillStyle = 'rgba(5,18,32,0.52)';
+      ctx.fillText('shadowgraphy - rotary spray', 8, H - 6);
     }
 
-    ScrollTrigger.create({
-      trigger: ph, start: 'top 88%',
-      onEnter:    () => { vis2 = true;  draw2(); },
-      onLeaveBack:() => { vis2 = false; cancelAnimationFrame(raf2); },
-    });
-    draw2();
+    withVisibility(host, draw);
   })();
 
   /* ══════════════════════════════════════════════════════════════
-     3. EVAPORATION — D²-law plot + pendant droplet sequence
-        Shows: D²(t) curves at different temperatures,
-               with numerical model overlay
+     3. EVAPORATION — D² law plot
   ══════════════════════════════════════════════════════════════ */
-  (function initEvaporation() {
-    const phs = document.querySelectorAll('#evaporation .fig-placeholder');
-    const ph  = phs[0]; if (!ph) return;
-    ph.innerHTML = '';
-    const c = document.createElement('canvas');
-    c.style.cssText = 'width:100%;height:100%;display:block;';
-    ph.appendChild(c);
+  (function evap() {
+    const host = document.querySelector('#evaporation .fig-placeholder');
+    if (!host) return;
+    const stage = makeCanvas(host); if (!stage) return;
+    const { ctx, getSize } = stage;
 
-    let t3 = 0, vis3 = false, raf3;
+    const series = [
+      { T: '298 K', K: 0.0012, col: '#4fc3f7' },
+      { T: '348 K', K: 0.0028, col: '#26c6da' },
+      { T: '398 K', K: 0.0055, col: '#00bcd4' },
+      { T: '448 K', K: 0.0095, col: '#0097a7' },
+      { T: '473 K', K: 0.014,  col: '#00838f' },
+    ];
+    const tMax = 90;
+    let tNow = 0;
+    const PAD = { l: 50, r: 64, t: 18, b: 36 };
 
-    function draw3() {
-      const dpr = window.devicePixelRatio || 1;
-      const W = c.offsetWidth, H = c.offsetHeight;
+    // pre-compute experimental noise so it isn't random per-frame
+    const noiseTable = series.map(() => {
+      const arr = [];
+      for (let ti = 0; ti < tMax; ti += 3.5) arr.push((Math.random() - 0.5) * 0.025);
+      return arr;
+    });
+
+    function draw() {
+      const { w: W, h: H } = getSize();
       if (!W || !H) return;
-      c.width = W*dpr; c.height = H*dpr;
-      const ctx = c.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#080f1e'; ctx.fillRect(0, 0, W, H);
 
-      ctx.clearRect(0, 0, W, H);
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, '#080f1e'); bg.addColorStop(1, '#040a14');
-      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      const CW = W - PAD.l - PAD.r;
+      const CH = H - PAD.t - PAD.b;
 
-      const PAD = { l: 54, r: 80, t: 22, b: 46 };
-      const CW  = W - PAD.l - PAD.r;
-      const CH  = H - PAD.t - PAD.b;
-
-      // Grid
       ctx.strokeStyle = 'rgba(79,195,247,0.07)'; ctx.lineWidth = 1;
       for (let i = 0; i <= 4; i++) {
         const x = PAD.l + i*CW/4;
@@ -324,260 +397,256 @@
         const y = PAD.t + i*CH/4;
         ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l+CW, y); ctx.stroke();
       }
-
-      // Evaporation constants K at different temps (D²-law: D²=D₀²-K·t)
-      const series = [
-        { T: '298 K', K: 0.0012, col: '#4fc3f7' },
-        { T: '348 K', K: 0.0028, col: '#26c6da' },
-        { T: '398 K', K: 0.0055, col: '#00bcd4' },
-        { T: '448 K', K: 0.0095, col: '#0097a7' },
-        { T: '473 K', K: 0.014,  col: '#00838f' },
-      ];
-      const D0sq = 1.0, tMax = 90;
-      const drawT = Math.min(tMax, t3 * 1.1);
-
+      const drawT = Math.min(tMax, tNow);
       function toX(time) { return PAD.l + CW * time / tMax; }
       function toY(D2)   { return PAD.t + CH * (1 - D2); }
 
-      series.forEach(s => {
-        // Experimental dots (noisy)
-        ctx.fillStyle = s.col + 'cc';
+      series.forEach((s, si) => {
+        const nt = noiseTable[si];
+        ctx.fillStyle = s.col;
+        let ni = 0;
         for (let ti = 0; ti <= drawT; ti += 3.5) {
-          const D2 = Math.max(0, D0sq - s.K * ti);
-          const noise = (Math.random()-0.5)*0.025;
-          const x = toX(ti), y = toY(D2 + noise);
-          ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
+          const D2 = Math.max(0, 1 - s.K * ti);
+          const n = nt[ni++] || 0;
+          ctx.beginPath();
+          ctx.arc(toX(ti), toY(D2 + n), 1.6, 0, Math.PI*2);
+          ctx.fill();
         }
-        // Model line (smooth)
         ctx.beginPath();
-        for (let ti = 0; ti <= drawT; ti += 0.5) {
-          const D2 = Math.max(0, D0sq - s.K * ti);
-          const x = toX(ti), y = toY(D2);
-          ti === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        for (let ti = 0; ti <= drawT; ti += 1) {
+          const D2 = Math.max(0, 1 - s.K * ti);
+          ti === 0 ? ctx.moveTo(toX(ti), toY(D2)) : ctx.lineTo(toX(ti), toY(D2));
         }
         ctx.strokeStyle = s.col;
-        ctx.lineWidth   = 1.5;
+        ctx.lineWidth = 1.2;
         ctx.setLineDash([4, 3]);
-        ctx.shadowBlur  = 6; ctx.shadowColor = s.col;
         ctx.stroke();
-        ctx.setLineDash([]); ctx.shadowBlur = 0;
+        ctx.setLineDash([]);
 
-        // Label at end
-        const D2end = Math.max(0, D0sq - s.K * drawT);
+        const D2end = Math.max(0, 1 - s.K * drawT);
         if (drawT >= 5) {
           ctx.fillStyle = s.col;
-          ctx.font = `${Math.max(8,W*0.025)}px DM Mono,monospace`;
-          ctx.fillText(s.T, PAD.l + CW + 4, toY(D2end) + 4);
+          ctx.font = '10px DM Mono,monospace';
+          ctx.fillText(s.T, PAD.l + CW + 4, toY(D2end) + 3);
         }
       });
 
-      // Axes
-      ctx.strokeStyle = 'rgba(79,195,247,0.4)'; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(79,195,247,0.4)'; ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(PAD.l, PAD.t); ctx.lineTo(PAD.l, PAD.t+CH); ctx.lineTo(PAD.l+CW, PAD.t+CH);
       ctx.stroke();
 
-      // Axis labels
-      ctx.fillStyle = 'rgba(179,229,252,0.45)';
-      ctx.font = `${Math.max(8,W*0.026)}px DM Mono,monospace`;
-      ctx.fillText('Time t (s) →', PAD.l+CW/2-30, H-6);
-      ctx.save(); ctx.translate(14, PAD.t+CH/2+20); ctx.rotate(-Math.PI/2);
-      ctx.fillText('(D/D₀)² →', 0, 0); ctx.restore();
+      ctx.fillStyle = 'rgba(179,229,252,0.55)';
+      ctx.font = '10px DM Mono,monospace';
+      ctx.fillText('Time t (s) →', PAD.l + CW/2 - 30, H - 12);
+      ctx.save();
+      ctx.translate(13, PAD.t + CH/2 + 16);
+      ctx.rotate(-Math.PI/2);
+      ctx.fillText('(D/D₀)² →', 0, 0);
+      ctx.restore();
+      ctx.fillText('D²-law — experiment (·) vs. 1-D model (---)', PAD.l + 4, PAD.t - 4);
 
-      // Caption
-      ctx.fillStyle = 'rgba(179,229,252,0.45)';
-      ctx.fillText('D²-law — experiment (·) vs. 1-D model (---)', PAD.l+4, PAD.t-6);
-
-      // Legend: model vs exp
-      ctx.strokeStyle = 'rgba(179,229,252,0.4)'; ctx.lineWidth=1.5;
-      ctx.setLineDash([4,3]);
-      ctx.beginPath(); ctx.moveTo(PAD.l+2, PAD.t+8); ctx.lineTo(PAD.l+20, PAD.t+8); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath(); ctx.arc(PAD.l+26, PAD.t+8, 2, 0, Math.PI*2);
-      ctx.fillStyle='rgba(179,229,252,0.4)'; ctx.fill();
-      ctx.fillStyle='rgba(179,229,252,0.35)'; ctx.font=`${Math.max(7,W*0.022)}px DM Mono,monospace`;
-      ctx.fillText('model / exp', PAD.l+30, PAD.t+12);
-
-      if (vis3) { t3 = Math.min(tMax, t3 + 0.35); raf3 = requestAnimationFrame(draw3); }
+      if (tNow < tMax) tNow = Math.min(tMax, tNow + 0.4);
     }
 
-    ScrollTrigger.create({
-      trigger: ph, start: 'top 88%',
-      onEnter:    () => { vis3 = true;  draw3(); },
-      onLeaveBack:() => { vis3 = false; t3 = 0;  cancelAnimationFrame(raf3); },
-    });
-    draw3();
+    withVisibility(host, draw);
   })();
 
   /* ══════════════════════════════════════════════════════════════
-     4. PROTOTYPE — Animated spray dryer schematic (wireframe)
-        Shows: chamber cross-section + spray cone + particle paths
+     4. PROTOTYPE — spray dryer schematic
   ══════════════════════════════════════════════════════════════ */
-  (function initPrototype() {
-    const ph = document.querySelector('#prototype .proto-visual');
-    if (!ph) return;
-    ph.innerHTML = '';
-    const c = document.createElement('canvas');
-    c.style.cssText = 'width:100%;height:100%;display:block;';
-    ph.appendChild(c);
+  (function proto() {
+    const host = document.querySelector('#prototype .proto-visual');
+    if (!host) return;
+    const stage = makeCanvas(host); if (!stage) return;
+    const { ctx, getSize } = stage;
 
-    let t4 = 0, vis4 = false, raf4;
+    const NPART = 54;
+    const part = Array.from({length: NPART}, (_, i) => ({
+      y:  Math.random(),
+      lane: (i / NPART - 0.5) * 0.7 + (Math.random() - 0.5) * 0.12,
+      r:  0.006 + Math.random() * 0.015,
+      sp: 0.0018 + Math.random() * 0.0038,
+      phase: Math.random() * Math.PI * 2,
+    }));
+    const vort = Array.from({ length: 34 }, () => ({
+      y: Math.random(),
+      side: Math.random() > 0.5 ? 1 : -1,
+      phase: Math.random() * Math.PI * 2,
+      sp: 0.001 + Math.random() * 0.0018,
+    }));
+    let t = 0;
 
-    // Particle paths through the dryer
-    const NPART = 40;
-    const partY = Array.from({length: NPART}, () => Math.random());
-    const partX = Array.from({length: NPART}, () => (Math.random()-0.5)*0.18);
-    const partR = Array.from({length: NPART}, () => 0.008 + Math.random()*0.014);
-    const partSpeed = Array.from({length: NPART}, () => 0.003 + Math.random()*0.004);
-    const partAlpha = Array.from({length: NPART}, () => 0);
-
-    function draw4() {
-      const dpr = window.devicePixelRatio || 1;
-      const W = c.offsetWidth, H = c.offsetHeight;
-      if (!W || !H) return;
-      c.width = W*dpr; c.height = H*dpr;
-      const ctx = c.getContext('2d');
-      ctx.setTransform(dpr,0,0,dpr,0,0);
-
-      ctx.clearRect(0,0,W,H);
-      const bg = ctx.createLinearGradient(0,0,0,H);
-      bg.addColorStop(0,'#06101e'); bg.addColorStop(1,'#030810');
-      ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
-
-      const cx = W/2;
-      // Chamber dimensions
-      const top   = H*0.08;
-      const bot   = H*0.88;
-      const chamW = W*0.42;
-
-      // Draw chamber outline (cylindrical dryer)
-      ctx.save();
-      ctx.strokeStyle = 'rgba(79,195,247,0.55)';
-      ctx.lineWidth   = 1.8;
-      ctx.shadowBlur  = 10; ctx.shadowColor = '#4fc3f7';
-
-      // Main chamber cylinder
+    function arrow(x1, y1, x2, y2, col) {
+      const a = Math.atan2(y2 - y1, x2 - x1);
+      ctx.strokeStyle = col;
+      ctx.fillStyle = col;
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(cx - chamW/2, top);
-      ctx.lineTo(cx - chamW/2, bot - H*0.12);
-      ctx.lineTo(cx - chamW*0.12, bot);
-      ctx.lineTo(cx + chamW*0.12, bot);
-      ctx.lineTo(cx + chamW/2, bot - H*0.12);
-      ctx.lineTo(cx + chamW/2, top);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - Math.cos(a - 0.55) * 7, y2 - Math.sin(a - 0.55) * 7);
+      ctx.lineTo(x2 - Math.cos(a + 0.55) * 7, y2 - Math.sin(a + 0.55) * 7);
       ctx.closePath();
+      ctx.fill();
+    }
+
+    function draw() {
+      const { w: W, h: H } = getSize();
+      if (!W || !H) return;
+      t++;
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, '#06101e');
+      bg.addColorStop(0.54, '#08182a');
+      bg.addColorStop(1, '#03101b');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      const cx = W / 2;
+      const top = H * 0.085;
+      const bot = H * 0.86;
+      const chamW = Math.min(W * 0.48, H * 0.58);
+      const neckW = chamW * 0.16;
+      const wall = {
+        lt: cx - chamW * 0.48,
+        rt: cx + chamW * 0.48,
+        lb: cx - chamW * 0.17,
+        rb: cx + chamW * 0.17,
+      };
+
+      const chamberFill = ctx.createLinearGradient(cx - chamW / 2, top, cx + chamW / 2, bot);
+      chamberFill.addColorStop(0, 'rgba(72,120,160,0.16)');
+      chamberFill.addColorStop(0.46, 'rgba(255,156,74,0.10)');
+      chamberFill.addColorStop(1, 'rgba(77,195,247,0.08)');
+      ctx.beginPath();
+      ctx.moveTo(wall.lt, top);
+      ctx.lineTo(wall.lt + chamW * 0.06, bot - H * 0.16);
+      ctx.lineTo(wall.lb, bot);
+      ctx.lineTo(wall.rb, bot);
+      ctx.lineTo(wall.rt - chamW * 0.06, bot - H * 0.16);
+      ctx.lineTo(wall.rt, top);
+      ctx.closePath();
+      ctx.fillStyle = chamberFill;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(129,212,250,0.62)';
+      ctx.lineWidth = 1.35;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(cx, top, chamW * 0.48, H * 0.036, 0, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Top dome
-      ctx.beginPath();
-      ctx.ellipse(cx, top, chamW/2, H*0.04, 0, 0, Math.PI*2);
-      ctx.stroke();
-
-      // Rotary atomizer disk (top center)
-      ctx.strokeStyle = 'rgba(100,200,255,0.7)';
-      ctx.beginPath();
-      ctx.ellipse(cx, top + H*0.04, chamW*0.12, H*0.02, 0, 0, Math.PI*2);
-      ctx.stroke();
-      // spinning blades
-      const spin = t4 * 0.04;
-      for (let b = 0; b < 6; b++) {
-        const ang = spin + b * Math.PI/3;
+      ctx.strokeStyle = 'rgba(129,212,250,0.14)';
+      for (let i = 1; i < 6; i++) {
+        const y = top + i * (bot - top) / 6;
+        const f = i / 6;
+        const half = chamW * (0.48 - 0.29 * Math.max(0, f - 0.72));
         ctx.beginPath();
-        ctx.moveTo(cx, top + H*0.04);
-        ctx.lineTo(cx + Math.cos(ang)*chamW*0.1, top + H*0.04 + Math.sin(ang)*H*0.018);
-        ctx.strokeStyle = 'rgba(79,195,247,0.5)'; ctx.lineWidth = 1.5;
+        ctx.ellipse(cx, y, half, H * 0.018, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Hot air inlet (side, arrows)
-      ctx.strokeStyle = 'rgba(255,160,50,0.5)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(cx - chamW/2 - 28, H*0.3); ctx.lineTo(cx - chamW/2, H*0.3); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx - chamW/2 - 8, H*0.3-6); ctx.lineTo(cx - chamW/2, H*0.3); ctx.lineTo(cx - chamW/2 - 8, H*0.3+6); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,160,50,0.5)'; ctx.font = `${Math.max(7,W*0.022)}px DM Mono,monospace`;
-      ctx.fillText('Hot air', cx - chamW/2 - 52, H*0.3 - 10);
-      ctx.fillText(`(${Math.round(298 + (t4 % 180) * 0.97)} K)`, cx - chamW/2 - 52, H*0.3 + 18);
-
-      // Exhaust outlet (top)
-      ctx.strokeStyle = 'rgba(150,220,255,0.4)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(cx + chamW*0.25, top - 2); ctx.lineTo(cx + chamW*0.25, top - 28); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + chamW*0.25 - 6, top-20); ctx.lineTo(cx + chamW*0.25, top-28); ctx.lineTo(cx + chamW*0.25 + 6, top-20); ctx.stroke();
-      ctx.fillStyle = 'rgba(150,220,255,0.4)';
-      ctx.fillText('exhaust', cx + chamW*0.25 - 20, top - 32);
-
-      // Product outlet (bottom)
-      ctx.strokeStyle = 'rgba(100,220,100,0.5)';
-      ctx.beginPath(); ctx.moveTo(cx, bot); ctx.lineTo(cx, bot + 24); ctx.stroke();
-      ctx.fillStyle = 'rgba(100,220,100,0.5)';
-      ctx.fillText('product', cx - 22, bot + 36);
-
-      ctx.shadowBlur = 0;
-
-      // Spray cone (triangle from atomizer)
-      const coneH = H * 0.55, coneW = chamW * 0.38;
-      const spray = ctx.createLinearGradient(cx, top+H*0.06, cx, top+H*0.06+coneH);
-      spray.addColorStop(0,'rgba(79,195,247,0.22)');
-      spray.addColorStop(1,'rgba(79,195,247,0.0)');
+      const feedY = top + H * 0.045;
+      ctx.strokeStyle = 'rgba(175,226,255,0.72)';
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(cx, top+H*0.06);
-      ctx.lineTo(cx-coneW, top+H*0.06+coneH);
-      ctx.lineTo(cx+coneW, top+H*0.06+coneH);
-      ctx.closePath();
-      ctx.fillStyle = spray; ctx.fill();
-
-      // Cone edges
-      ctx.strokeStyle = 'rgba(79,195,247,0.3)'; ctx.lineWidth = 1;
-      ctx.setLineDash([4,4]);
+      ctx.moveTo(cx, top - H * 0.08);
+      ctx.lineTo(cx, feedY);
+      ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(cx, top+H*0.06);
-      ctx.lineTo(cx-coneW, top+H*0.06+coneH);
-      ctx.moveTo(cx, top+H*0.06);
-      ctx.lineTo(cx+coneW, top+H*0.06+coneH);
-      ctx.stroke(); ctx.setLineDash([]);
+      ctx.ellipse(cx, feedY, neckW, H * 0.017, 0, 0, Math.PI * 2);
+      ctx.stroke();
 
-      // Particles flowing through chamber
-      for (let i = 0; i < NPART; i++) {
-        partY[i] += partSpeed[i];
-        if (partY[i] > 1) { partY[i] = 0; partX[i] = (Math.random()-0.5)*0.18; }
-        const frac = partY[i];
-        const px = cx + partX[i] * chamW + Math.sin(frac*12 + i)*0.02*chamW;
-        const py = top + H*0.06 + frac*(coneH + H*0.25);
-        const r  = Math.max(1, partR[i] * W * (1 - frac * 0.6));
-        const alpha = Math.min(1, frac*5) * Math.max(0, 1-(frac-0.8)/0.2);
-
-        const grd = ctx.createRadialGradient(px-r*0.3, py-r*0.3, 0, px, py, r*2);
-        grd.addColorStop(0,'rgba(200,240,255,0.9)');
-        grd.addColorStop(0.5,'rgba(79,195,247,0.7)');
-        grd.addColorStop(1,'rgba(79,195,247,0)');
-        ctx.beginPath(); ctx.arc(px, py, r*1.8, 0, Math.PI*2);
-        ctx.fillStyle = grd; ctx.globalAlpha = alpha * 0.8; ctx.fill();
-        ctx.globalAlpha = 1;
+      const spin = t * 0.11;
+      for (let b = 0; b < 8; b++) {
+        const a = spin + b * Math.PI / 4;
+        ctx.strokeStyle = 'rgba(79,195,247,0.34)';
+        ctx.beginPath();
+        ctx.moveTo(cx, feedY);
+        ctx.lineTo(cx + Math.cos(a) * neckW * 1.15, feedY + Math.sin(a) * H * 0.025);
+        ctx.stroke();
       }
 
-      // Dimension labels
-      ctx.strokeStyle = 'rgba(79,195,247,0.25)'; ctx.lineWidth = 0.8;
-      ctx.setLineDash([2,4]);
-      ctx.beginPath(); ctx.moveTo(cx+chamW/2+8, top); ctx.lineTo(cx+chamW/2+8, bot); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(179,229,252,0.4)';
-      ctx.font = `${Math.max(7,W*0.022)}px DM Mono,monospace`;
-      ctx.save(); ctx.translate(cx+chamW/2+20, (top+bot)/2); ctx.rotate(-Math.PI/2);
-      ctx.fillText('chamber height', 0, 0); ctx.restore();
+      const inletY = H * 0.30;
+      arrow(cx - chamW * 0.82, inletY, wall.lt + 5, inletY, 'rgba(255,176,82,0.72)');
+      ctx.fillStyle = 'rgba(255,176,82,0.72)';
+      ctx.font = '9px DM Mono,monospace';
+      ctx.fillText('heated drying air', cx - chamW * 0.98, inletY - 12);
 
-      ctx.restore();
+      arrow(cx + chamW * 0.28, top - H * 0.01, cx + chamW * 0.28, top - H * 0.095, 'rgba(150,220,255,0.56)');
+      ctx.fillStyle = 'rgba(150,220,255,0.62)';
+      ctx.fillText('humid exhaust', cx + chamW * 0.15, top - H * 0.11);
 
-      // Title
-      ctx.fillStyle = 'rgba(79,195,247,0.5)';
-      ctx.font = `600 ${Math.max(9,W*0.028)}px Barlow Condensed,sans-serif`;
-      ctx.fillText('SPRAY DRYER — SCHEMATIC CROSS-SECTION', W/2 - 120, H*0.97);
+      arrow(cx, bot, cx, Math.min(H - 12, bot + H * 0.10), 'rgba(117,222,147,0.68)');
+      ctx.fillStyle = 'rgba(117,222,147,0.7)';
+      ctx.fillText('powder outlet', cx - 30, Math.min(H - 4, bot + H * 0.13));
 
-      if (vis4) { t4++; raf4 = requestAnimationFrame(draw4); }
+      vort.forEach((v) => {
+        v.y += v.sp;
+        if (v.y > 1) v.y = 0;
+        const yy = top + v.y * (bot - top) * 0.86;
+        const taper = 1 - Math.max(0, v.y - 0.72) * 0.65;
+        const amp = chamW * 0.30 * taper;
+        const x = cx + Math.sin(v.y * 10 + t * 0.035 + v.phase) * amp;
+        const x2 = x + v.side * (18 + Math.sin(t * 0.03 + v.phase) * 8);
+        ctx.strokeStyle = 'rgba(255,176,82,' + (0.14 + (1 - v.y) * 0.12) + ')';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, yy);
+        ctx.quadraticCurveTo((x + x2) / 2, yy - 8, x2, yy - 16);
+        ctx.stroke();
+      });
+
+      const coneH = H * 0.56;
+      const coneW = chamW * 0.34;
+      const spray = ctx.createLinearGradient(cx, feedY, cx, feedY + coneH);
+      spray.addColorStop(0, 'rgba(79,195,247,0.24)');
+      spray.addColorStop(0.42, 'rgba(255,176,82,0.13)');
+      spray.addColorStop(1, 'rgba(117,222,147,0.035)');
+      ctx.beginPath();
+      ctx.moveTo(cx, feedY + H * 0.02);
+      ctx.lineTo(cx - coneW, feedY + coneH);
+      ctx.lineTo(cx + coneW, feedY + coneH);
+      ctx.closePath();
+      ctx.fillStyle = spray;
+      ctx.fill();
+
+      for (let i = 0; i < NPART; i++) {
+        const p = part[i];
+        p.y += p.sp;
+        if (p.y > 1) {
+          p.y = 0;
+          p.lane = (Math.random() - 0.5) * 0.82;
+          p.r = 0.006 + Math.random() * 0.015;
+        }
+        const spread = coneW * (0.1 + p.y * 0.9);
+        const px = cx + p.lane * spread + Math.sin(p.y * 14 + t * 0.05 + p.phase) * chamW * 0.025;
+        const py = feedY + H * 0.03 + p.y * (coneH + H * 0.20);
+        const dry = Math.min(1, p.y * 1.25);
+        const r = Math.max(1, p.r * W * (1 - dry * 0.58));
+        const alpha = Math.min(1, p.y * 6) * Math.max(0, 1 - Math.max(0, p.y - 0.94) / 0.06);
+        const rr = Math.round(93 + dry * 122);
+        const gg = Math.round(203 + dry * 13);
+        const bb = Math.round(247 - dry * 130);
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(' + rr + ',' + gg + ',' + bb + ',' + (alpha * 0.76) + ')';
+        ctx.fill();
+      }
+
+      ctx.fillStyle = 'rgba(7,17,30,0.58)';
+      ctx.fillRect(0, H - 24, W, 24);
+      ctx.fillStyle = 'rgba(129,212,250,0.72)';
+      ctx.font = '600 10px Barlow Condensed,sans-serif';
+      ctx.fillText('SPRAY DRYER - CROSS-SECTION', 12, H - 9);
+      ctx.font = '9px DM Mono,monospace';
+      ctx.fillStyle = 'rgba(230,238,248,0.52)';
+      ctx.fillText('feed atomization -> hot air contact -> dried powder', W - 250, H - 9);
     }
 
-    ScrollTrigger.create({
-      trigger: ph, start: 'top 88%',
-      onEnter:    () => { vis4 = true;  draw4(); },
-      onLeaveBack:() => { vis4 = false; cancelAnimationFrame(raf4); },
-    });
-    draw4();
+    withVisibility(host, draw);
   })();
 
 })();

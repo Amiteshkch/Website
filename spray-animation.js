@@ -45,13 +45,7 @@
   function updateScroll() {
     const hero = document.getElementById('hero');
     if (!hero) return;
-
-    const rect = hero.getBoundingClientRect();
-    const total = Math.max(1, hero.offsetHeight - window.innerHeight);
-
-    // Clean mapping for pinned hero scroll:
-    // start of hero = 0, end of sticky hero zone = 1
-    scrollP = Math.min(1, Math.max(0, -rect.top / total));
+    scrollP = Math.min(1, Math.max(0, window.scrollY / hero.offsetHeight));
   }
   window.addEventListener('scroll', updateScroll, { passive: true });
 

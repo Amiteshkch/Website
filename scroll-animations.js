@@ -14,42 +14,27 @@
   gsap.registerPlugin(ScrollTrigger);
 
   // ── LENIS SMOOTH SCROLL ──────────────────────────────────────
+  // Disabled — was competing with multiple canvas RAF loops and adding
+  // input latency on scroll. Native scrolling is smoother here.
+  /*
   let lenis = null;
   if (window.Lenis) {
-    lenis = new Lenis({
-      lerp: 0.08,
-      smoothWheel: true,
-      syncTouch: false,
-    });
+    lenis = new Lenis({ lerp: 0.08, smoothWheel: true, syncTouch: false });
     lenis.on('scroll', ScrollTrigger.update);
     gsap.ticker.add((time) => lenis.raf(time * 1000));
     gsap.ticker.lagSmoothing(0);
   }
+  */
 
   // ── HERO TEXT ENTRANCE ───────────────────────────────────────
-  const heroTl = gsap.timeline({ delay: 0.2 });
-  heroTl
-    .from('.hero-tag', {
-      opacity: 0, y: 18, duration: 0.7, ease: 'power3.out',
-    })
-    .from('.hero-name', {
-      opacity: 0, y: 32, duration: 0.85, ease: 'power3.out',
-    }, '-=0.4')
-    .from('.hero-degree', {
-      opacity: 0, y: 16, duration: 0.6, ease: 'power2.out',
-    }, '-=0.5')
-    .from('.hero-bio', {
-      opacity: 0, y: 12, duration: 0.6, ease: 'power2.out',
-    }, '-=0.45')
-    .from('.hero-actions', {
-      opacity: 0, y: 10, duration: 0.5, ease: 'power2.out',
-    }, '-=0.4')
-    .from('.hero-stats', {
-      opacity: 0, y: 10, duration: 0.5, ease: 'power2.out',
-    }, '-=0.3')
-    .from('.hero-card', {
-      opacity: 0, x: 24, duration: 0.5, stagger: 0.1, ease: 'power2.out',
-    }, '-=0.5');
+  // Hero entrance is driven by CSS keyframe animations in index.html
+  // so it never depends on GSAP timer state.
+  if (window.gsap) {
+    try { gsap.ticker.wake && gsap.ticker.wake(); } catch (e) {}
+  }
+  const heroTl = null;
+  const _suppressed = () => null;
+  void heroTl; void _suppressed;
 
   // ── SCROLL-REVEAL HELPER ─────────────────────────────────────
   function revealFrom(selector, vars, triggerEl) {
@@ -94,6 +79,22 @@
       toggleActions: 'play none none none',
     },
   });
+
+  // interactive process explorer
+  if (document.querySelector('.process-explorer')) {
+    gsap.from('.process-intro, .process-controls, .process-visual-panel', {
+      opacity: 0,
+      y: 34,
+      duration: 0.75,
+      stagger: 0.12,
+      ease: 'power3.out',
+      scrollTrigger: {
+        trigger: '.process-explorer',
+        start: 'top 82%',
+        toggleActions: 'play none none none',
+      },
+    });
+  }
 
   // ── STUDY LAYOUT (alternating slide-in) ──────────────────────
   document.querySelectorAll('.study-layout').forEach((layout, i) => {
